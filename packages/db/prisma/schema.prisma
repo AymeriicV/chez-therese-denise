@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator pyclient {
+  provider             = "prisma-client-py"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MANAGER
+  CHEF
+  EMPLOYEE
+  ACCOUNTANT
+  VIEWER
+}
+
+enum InvoiceStatus {
+  UPLOADED
+  OCR_PROCESSING
+  OCR_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum StockMovementType {
+  PURCHASE
+  PRODUCTION
+  WASTE
+  INVENTORY_ADJUSTMENT
+  SALE
+  TRANSFER
+}
+
+model User {
+  id             String             @id @default(uuid())
+  email          String             @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  isActive       Boolean            @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  memberships    RestaurantMember[]
+  auditLogs      AuditLog[]
+  timeClockLogs  TimeClockLog[]
+}
+
+model Restaurant {
+  id                  String               @id @default(uuid())
+  name                String
+  legalName           String?
+  siret               String?
+  timezone            String               @default("Europe/Paris")
+  currency            String               @default("EUR")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  members             RestaurantMember[]
+  suppliers           Supplier[]
+  invoices            SupplierInvoice[]
+  inventoryItems      InventoryItem[]
+  recipes             Recipe[]
+  subRecipes          SubRecipe[]
+  temperatureLogs     TemperatureLog[]
+  auditLogs           AuditLog[]
+  notifications       Notification[]
+  companySettings     CompanySettings?
+}
+
+model RestaurantMember {
+  id           String     @id @default(uuid())
+  userId       String
+  restaurantId String
+  role         UserRole
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id])
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@unique([userId, restaurantId])
+}
+
+model Supplier {
+  id           String            @id @default(uuid())
+  restaurantId String
+  name         String
+  contactName  String?
+  email        String?
+  phone        String?
+  leadTimeDays Int               @default(2)
+  isActive     Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  restaurant   Restaurant        @relation(fields: [restaurantId], references: [id])
+  invoices     SupplierInvoice[]
+}
+
+model SupplierInvoice {
+  id             String        @id @default(uuid())
+  restaurantId   String
+  supplierId     String?
+  number         String?
+  status         InvoiceStatus @default(UPLOADED)
+  originalName   String
+  storagePath    String
+  totalExcludingTax Decimal?   @db.Decimal(12, 2)
+  totalIncludingTax Decimal?   @db.Decimal(12, 2)
+  invoiceDate    DateTime?
+  ocrPayload     Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  restaurant     Restaurant    @relation(fields: [restaurantId], references: [id])
+  supplier       Supplier?     @relation(fields: [supplierId], references: [id])
+}
+
+model InventoryItem {
+  id             String          @id @default(uuid())
+  restaurantId   String
+  sku            String?
+  name           String
+  category       String
+  unit           String
+  quantityOnHand Decimal         @default(0) @db.Decimal(12, 3)
+  reorderPoint   Decimal         @default(0) @db.Decimal(12, 3)
+  averageCost    Decimal         @default(0) @db.Decimal(12, 4)
+  allergens      String[]        @default([])
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  restaurant     Restaurant      @relation(fields: [restaurantId], references: [id])
+  movements      StockMovement[]
+}
+
+model StockMovement {
+  id              String            @id @default(uuid())
+  inventoryItemId String
+  type            StockMovementType
+  quantity        Decimal           @db.Decimal(12, 3)
+  unitCost        Decimal?          @db.Decimal(12, 4)
+  note            String?
+  createdAt       DateTime          @default(now())
+  item            InventoryItem     @relation(fields: [inventoryItemId], references: [id])
+}
+
+model Recipe {
+  id           String     @id @default(uuid())
+  restaurantId String
+  name         String
+  sellingPrice Decimal    @default(0) @db.Decimal(12, 2)
+  foodCost     Decimal    @default(0) @db.Decimal(12, 2)
+  marginRate   Decimal    @default(0) @db.Decimal(8, 4)
+  allergens    String[]   @default([])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+}
+
+model SubRecipe {
+  id           String     @id @default(uuid())
+  restaurantId String
+  name         String
+  batchUnit    String
+  batchYield   Decimal    @db.Decimal(12, 3)
+  cost         Decimal    @default(0) @db.Decimal(12, 2)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+}
+
+model TemperatureLog {
+  id           String     @id @default(uuid())
+  restaurantId String
+  equipment    String
+  valueCelsius  Decimal    @db.Decimal(5, 2)
+  recordedAt   DateTime   @default(now())
+  isCompliant  Boolean
+  correctiveAction String?
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+}
+
+model TimeClockLog {
+  id        String   @id @default(uuid())
+  userId    String
+  clockIn   DateTime
+  clockOut  DateTime?
+  source    String   @default("web")
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id           String     @id @default(uuid())
+  restaurantId String
+  title        String
+  body         String
+  level        String     @default("info")
+  readAt       DateTime?
+  createdAt    DateTime   @default(now())
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+}
+
+model AuditLog {
+  id           String     @id @default(uuid())
+  restaurantId String?
+  userId       String?
+  action       String
+  entity       String
+  entityId     String?
+  metadata     Json?
+  createdAt    DateTime   @default(now())
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id])
+  user         User?      @relation(fields: [userId], references: [id])
+}
+
+model CompanySettings {
+  id           String     @id @default(uuid())
+  restaurantId String     @unique
+  brandName    String
+  invoiceEmail String?
+  haccpManager String?
+  settings     Json       @default("{}")
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+}

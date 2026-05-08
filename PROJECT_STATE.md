@@ -19,7 +19,7 @@ Pour reprendre apres interruption:
 ## Etapes
 
 - [x] 01 - Architecture monorepo initiale
-- [ ] 02 - Docker, PostgreSQL et Prisma
+- [x] 02 - Docker, PostgreSQL et Prisma
 - [ ] 03 - Backend FastAPI, auth JWT et roles
 - [ ] 04 - Frontend Next.js dashboard premium et sidebar
 - [ ] 05 - Modules metier par domaine
@@ -30,4 +30,13 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-01 - Architecture monorepo initiale.
+02 - Docker, PostgreSQL et Prisma.
+
+## Commandes etape 02
+
+```bash
+cp .env.example .env
+docker compose up --build postgres
+pnpm --filter @ctd/db prisma:generate
+pnpm --filter @ctd/db prisma:migrate
+```
