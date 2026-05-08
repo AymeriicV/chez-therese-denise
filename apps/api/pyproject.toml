@@ -1,0 +1,22 @@
+[project]
+name = "ctd-api"
+version = "0.1.0"
+description = "FastAPI backend for Chez Therese et Denise SaaS"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115.6",
+  "uvicorn[standard]>=0.34.0",
+  "pydantic-settings>=2.7.0",
+  "python-jose[cryptography]>=3.3.0",
+  "passlib[bcrypt]>=1.7.4",
+  "python-multipart>=0.0.20",
+  "email-validator>=2.2.0",
+  "prisma>=0.15.0",
+  "orjson>=3.10.12",
+  "pytest>=8.3.4",
+  "httpx>=0.28.1"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
