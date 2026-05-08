@@ -1,0 +1,14 @@
+{
+  "name": "chez-therese-denise-saas",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "docker compose up --build",
+    "db:generate": "pnpm --filter @ctd/db prisma:generate",
+    "db:migrate": "pnpm --filter @ctd/db prisma:migrate",
+    "web:lint": "pnpm --filter @ctd/web lint"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2"
+  }
+}
