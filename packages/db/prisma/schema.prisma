@@ -105,6 +105,7 @@ model Supplier {
   updatedAt    DateTime          @updatedAt
   restaurant   Restaurant        @relation(fields: [restaurantId], references: [id])
   invoices     SupplierInvoice[]
+  inventoryItems InventoryItem[]
 }
 
 model SupplierInvoice {
@@ -149,17 +150,21 @@ model SupplierInvoiceLine {
 model InventoryItem {
   id             String          @id @default(uuid())
   restaurantId   String
+  supplierId     String?
   sku            String?
   name           String
   category       String
+  storageArea    String?
   unit           String
   quantityOnHand Decimal         @default(0) @db.Decimal(12, 3)
   reorderPoint   Decimal         @default(0) @db.Decimal(12, 3)
   averageCost    Decimal         @default(0) @db.Decimal(12, 4)
   allergens      String[]        @default([])
+  lastCountedAt  DateTime?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   restaurant     Restaurant      @relation(fields: [restaurantId], references: [id])
+  supplier       Supplier?       @relation(fields: [supplierId], references: [id])
   movements      StockMovement[]
 }
 

@@ -63,10 +63,21 @@ class InventoryItemCreate(BaseModel):
     name: str
     category: str
     unit: str
+    sku: str | None = None
+    supplier_id: str | None = None
+    storage_area: str | None = None
     quantity_on_hand: Decimal = Decimal("0")
     reorder_point: Decimal = Decimal("0")
     average_cost: Decimal = Decimal("0")
     allergens: list[str] = []
+
+
+class StockMovementCreate(BaseModel):
+    inventory_item_id: str
+    type: str
+    quantity: Decimal
+    unit_cost: Decimal | None = None
+    note: str | None = None
 
 
 class TemperatureCreate(BaseModel):

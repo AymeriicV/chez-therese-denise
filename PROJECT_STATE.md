@@ -26,6 +26,7 @@ Pour reprendre apres interruption:
 - [x] 05 - Modules metier par domaine
 - [x] 06 - OCR factures fournisseurs de bout en bout
 - [x] 07 - Gestion fournisseurs de bout en bout
+- [x] 08 - Stocks intelligents de bout en bout
 
 ## Modules cible
 
@@ -33,7 +34,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-07 - Gestion fournisseurs de bout en bout.
+08 - Stocks intelligents de bout en bout.
 
 ## Commandes etape 02
 
@@ -73,7 +74,7 @@ open http://localhost:3000/suppliers
 - `docker compose config`: non execute, `docker` absent de l'environnement hote.
 - `pnpm --version`: non execute, `pnpm` absent de l'environnement hote. Les conteneurs utilisent Corepack.
 - `tsc --version`: non execute, `tsc` absent de l'environnement hote.
-- `git push origin main`: OK apres etape 06.
+- `git push origin main`: OK apres etape 07.
 
 ## GitHub
 
@@ -110,6 +111,20 @@ open http://localhost:3000/suppliers
 - API: liste enrichie, detail, creation, mise a jour, archivage, stats factures et audit logs.
 - Frontend: page `/suppliers` premium mobile first avec recherche, selection, fiche contact, KPIs achat et archivage.
 
+## Commandes etape 08
+
+```bash
+docker compose up --build
+pnpm --filter @ctd/db prisma:migrate
+open http://localhost:3000/stock
+```
+
+## Etape 08 - Details
+
+- Prisma: enrichissement stock avec fournisseur, zone de stockage et dernier comptage.
+- API: synthese stock, alertes seuil, creation article, mouvements entrants/sortants et audit logs.
+- Frontend: page `/stock` premium mobile first avec recherche, valorisation, alertes rupture et actions rapides.
+
 ## Prochaine etape recommandee
 
-Brancher le module stocks intelligents de bout en bout: mouvements, seuils, alertes rupture, valorisation et interface mobile.
+Brancher le module inventaires de bout en bout: sessions de comptage, ecarts, validation manager et ajustements stock.
