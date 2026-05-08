@@ -15,6 +15,7 @@ Pour reprendre apres interruption:
 2. Executer `git status --short --branch`.
 3. Continuer a partir de la derniere etape marquee `done`.
 4. Mettre a jour ce fichier avant chaque commit.
+5. Apres chaque grosse etape, faire un commit clair puis pousser `main` sur GitHub.
 
 ## Etapes
 
@@ -69,6 +70,13 @@ open http://localhost:3000/suppliers
 - `python3 -m py_compile` sur `apps/api`: OK.
 - `docker compose config`: non execute, `docker` absent de l'environnement hote.
 - `pnpm --version`: non execute, `pnpm` absent de l'environnement hote. Les conteneurs utilisent Corepack.
+- `git push origin main`: bloque par authentification GitHub HTTPS absente dans l'environnement (`could not read Username`).
+
+## GitHub
+
+- Remote: `origin` -> `https://github.com/AymeriicV/chez-therese-denise.git`
+- Regle active: pousser automatiquement apres chaque grosse etape si les credentials GitHub sont disponibles.
+- Etat actuel: push en attente d'authentification GitHub.
 
 ## Prochaine etape recommandee
 
