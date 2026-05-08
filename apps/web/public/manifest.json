@@ -1,0 +1,16 @@
+{
+  "name": "Chez Therese et Denise",
+  "short_name": "CTD",
+  "description": "Gestion restaurant premium",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#050505",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

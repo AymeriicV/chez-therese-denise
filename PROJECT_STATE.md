@@ -21,7 +21,7 @@ Pour reprendre apres interruption:
 - [x] 01 - Architecture monorepo initiale
 - [x] 02 - Docker, PostgreSQL et Prisma
 - [x] 03 - Backend FastAPI, auth JWT et roles
-- [ ] 04 - Frontend Next.js dashboard premium et sidebar
+- [x] 04 - Frontend Next.js dashboard premium et sidebar
 - [ ] 05 - Modules metier par domaine
 
 ## Modules cible
@@ -30,7 +30,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-03 - Backend FastAPI, auth JWT et roles.
+04 - Frontend Next.js dashboard premium et sidebar.
 
 ## Commandes etape 02
 
@@ -46,4 +46,11 @@ pnpm --filter @ctd/db prisma:migrate
 ```bash
 docker compose up --build api
 curl http://localhost:8000/health
+```
+
+## Commandes etape 04
+
+```bash
+docker compose up --build web
+open http://localhost:3000/dashboard
 ```
