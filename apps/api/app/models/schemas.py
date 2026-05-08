@@ -37,7 +37,26 @@ class SupplierCreate(BaseModel):
     contact_name: str | None = None
     email: EmailStr | None = None
     phone: str | None = None
+    address: str | None = None
+    categories: list[str] = []
+    payment_terms: str | None = None
+    minimum_order: Decimal | None = None
+    rating: Decimal | None = None
     lead_time_days: int = 2
+
+
+class SupplierUpdate(BaseModel):
+    name: str | None = None
+    contact_name: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    address: str | None = None
+    categories: list[str] | None = None
+    payment_terms: str | None = None
+    minimum_order: Decimal | None = None
+    rating: Decimal | None = None
+    lead_time_days: int | None = None
+    is_active: bool | None = None
 
 
 class InventoryItemCreate(BaseModel):

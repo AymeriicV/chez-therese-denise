@@ -94,6 +94,11 @@ model Supplier {
   contactName  String?
   email        String?
   phone        String?
+  address      String?
+  categories   String[]          @default([])
+  paymentTerms String?
+  minimumOrder Decimal?          @db.Decimal(12, 2)
+  rating       Decimal?          @db.Decimal(3, 2)
   leadTimeDays Int               @default(2)
   isActive     Boolean           @default(true)
   createdAt    DateTime          @default(now())

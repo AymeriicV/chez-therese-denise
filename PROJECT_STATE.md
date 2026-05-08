@@ -25,6 +25,7 @@ Pour reprendre apres interruption:
 - [x] 04 - Frontend Next.js dashboard premium et sidebar
 - [x] 05 - Modules metier par domaine
 - [x] 06 - OCR factures fournisseurs de bout en bout
+- [x] 07 - Gestion fournisseurs de bout en bout
 
 ## Modules cible
 
@@ -32,7 +33,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-06 - OCR factures fournisseurs de bout en bout.
+07 - Gestion fournisseurs de bout en bout.
 
 ## Commandes etape 02
 
@@ -72,7 +73,7 @@ open http://localhost:3000/suppliers
 - `docker compose config`: non execute, `docker` absent de l'environnement hote.
 - `pnpm --version`: non execute, `pnpm` absent de l'environnement hote. Les conteneurs utilisent Corepack.
 - `tsc --version`: non execute, `tsc` absent de l'environnement hote.
-- `git push origin main`: OK au dernier retest utilisateur.
+- `git push origin main`: OK apres etape 06.
 
 ## GitHub
 
@@ -95,6 +96,20 @@ open http://localhost:3000/invoices
 - API: upload facture, extraction OCR structuree, relance traitement, approbation, rejet, audit logs.
 - Frontend: page `/invoices` premium mobile first avec drag and drop, file de revue, detail OCR, lignes extraites et actions.
 
+## Commandes etape 07
+
+```bash
+docker compose up --build
+pnpm --filter @ctd/db prisma:migrate
+open http://localhost:3000/suppliers
+```
+
+## Etape 07 - Details
+
+- Prisma: enrichissement fournisseur avec adresse, categories, conditions de paiement, minimum de commande et note.
+- API: liste enrichie, detail, creation, mise a jour, archivage, stats factures et audit logs.
+- Frontend: page `/suppliers` premium mobile first avec recherche, selection, fiche contact, KPIs achat et archivage.
+
 ## Prochaine etape recommandee
 
-Brancher le module fournisseurs de bout en bout: liste, creation, detail fournisseur, delais, historique facture et indicateurs achat.
+Brancher le module stocks intelligents de bout en bout: mouvements, seuils, alertes rupture, valorisation et interface mobile.
