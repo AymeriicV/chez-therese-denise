@@ -57,6 +57,37 @@ class TemperatureCreate(BaseModel):
     corrective_action: str | None = None
 
 
+class InvoiceLineOut(BaseModel):
+    id: str
+    label: str
+    quantity: Decimal
+    unit: str
+    unit_price: Decimal
+    total: Decimal
+    tax_rate: Decimal | None = None
+    confidence: Decimal | None = None
+
+
+class InvoiceOut(BaseModel):
+    id: str
+    original_name: str
+    status: str
+    supplier_name: str | None = None
+    number: str | None = None
+    total_excluding_tax: Decimal | None = None
+    total_including_tax: Decimal | None = None
+    invoice_date: datetime | None = None
+    ocr_confidence: Decimal | None = None
+    processed_at: datetime | None = None
+    approved_at: datetime | None = None
+    rejected_reason: str | None = None
+    lines: list[InvoiceLineOut] = []
+
+
+class InvoiceRejectRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class ModuleSummary(BaseModel):
     key: str
     label: str

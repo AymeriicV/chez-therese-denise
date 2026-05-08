@@ -110,14 +110,35 @@ model SupplierInvoice {
   status         InvoiceStatus @default(UPLOADED)
   originalName   String
   storagePath    String
+  mimeType       String?
+  fileSize       Int?
+  ocrConfidence  Decimal?      @db.Decimal(5, 4)
   totalExcludingTax Decimal?   @db.Decimal(12, 2)
   totalIncludingTax Decimal?   @db.Decimal(12, 2)
   invoiceDate    DateTime?
   ocrPayload     Json?
+  processedAt    DateTime?
+  approvedAt     DateTime?
+  rejectedReason String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   restaurant     Restaurant    @relation(fields: [restaurantId], references: [id])
   supplier       Supplier?     @relation(fields: [supplierId], references: [id])
+  lines          SupplierInvoiceLine[]
+}
+
+model SupplierInvoiceLine {
+  id          String          @id @default(uuid())
+  invoiceId   String
+  label       String
+  quantity    Decimal         @default(1) @db.Decimal(12, 3)
+  unit        String           @default("piece")
+  unitPrice   Decimal         @default(0) @db.Decimal(12, 4)
+  total       Decimal         @default(0) @db.Decimal(12, 2)
+  taxRate     Decimal?        @db.Decimal(5, 2)
+  confidence  Decimal?        @db.Decimal(5, 4)
+  createdAt   DateTime        @default(now())
+  invoice     SupplierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 }
 
 model InventoryItem {

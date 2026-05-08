@@ -24,6 +24,7 @@ Pour reprendre apres interruption:
 - [x] 03 - Backend FastAPI, auth JWT et roles
 - [x] 04 - Frontend Next.js dashboard premium et sidebar
 - [x] 05 - Modules metier par domaine
+- [x] 06 - OCR factures fournisseurs de bout en bout
 
 ## Modules cible
 
@@ -31,7 +32,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-05 - Surfaces UI des modules metier par domaine.
+06 - OCR factures fournisseurs de bout en bout.
 
 ## Commandes etape 02
 
@@ -66,18 +67,34 @@ open http://localhost:3000/suppliers
 
 ## Validation locale
 
-- `git status --short --branch`: propre sur `master`.
-- `python3 -m py_compile` sur `apps/api`: OK.
+- `git status --short --branch`: propre sur `main` avant l'etape 06.
+- `python3 -m py_compile` sur `apps/api`: OK apres etape 06.
 - `docker compose config`: non execute, `docker` absent de l'environnement hote.
 - `pnpm --version`: non execute, `pnpm` absent de l'environnement hote. Les conteneurs utilisent Corepack.
-- `git push origin main`: bloque par authentification GitHub HTTPS absente dans l'environnement (`could not read Username`).
+- `tsc --version`: non execute, `tsc` absent de l'environnement hote.
+- `git push origin main`: OK au dernier retest utilisateur.
 
 ## GitHub
 
 - Remote: `origin` -> `https://github.com/AymeriicV/chez-therese-denise.git`
 - Regle active: pousser automatiquement apres chaque grosse etape si les credentials GitHub sont disponibles.
-- Etat actuel: push en attente d'authentification GitHub.
+- Etat actuel: push automatique requis apres chaque commit de grosse etape.
+
+## Commandes etape 06
+
+```bash
+docker compose up --build
+pnpm --filter @ctd/db prisma:migrate
+open http://localhost:3000/invoices
+```
+
+## Etape 06 - Details
+
+- Prisma: enrichissement `SupplierInvoice` avec metadata fichier, score OCR, timestamps de traitement, approbation et rejet.
+- Prisma: ajout `SupplierInvoiceLine` pour lignes facture exploitables par stocks, couts matieres et audit.
+- API: upload facture, extraction OCR structuree, relance traitement, approbation, rejet, audit logs.
+- Frontend: page `/invoices` premium mobile first avec drag and drop, file de revue, detail OCR, lignes extraites et actions.
 
 ## Prochaine etape recommandee
 
-Brancher le premier module complet de bout en bout: OCR factures fournisseurs avec stockage fichier, statut de traitement, ecran drag and drop, file de revue et journal d'audit.
+Brancher le module fournisseurs de bout en bout: liste, creation, detail fournisseur, delais, historique facture et indicateurs achat.
