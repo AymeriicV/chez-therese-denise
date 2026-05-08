@@ -62,3 +62,14 @@ docker compose up --build web
 open http://localhost:3000/invoices
 open http://localhost:3000/suppliers
 ```
+
+## Validation locale
+
+- `git status --short --branch`: propre sur `master`.
+- `python3 -m py_compile` sur `apps/api`: OK.
+- `docker compose config`: non execute, `docker` absent de l'environnement hote.
+- `pnpm --version`: non execute, `pnpm` absent de l'environnement hote. Les conteneurs utilisent Corepack.
+
+## Prochaine etape recommandee
+
+Brancher le premier module complet de bout en bout: OCR factures fournisseurs avec stockage fichier, statut de traitement, ecran drag and drop, file de revue et journal d'audit.
