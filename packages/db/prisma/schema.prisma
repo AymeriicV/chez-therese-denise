@@ -39,6 +39,14 @@ enum StockMovementType {
   TRANSFER
 }
 
+enum InventorySessionStatus {
+  DRAFT
+  COUNTING
+  REVIEW
+  VALIDATED
+  CANCELLED
+}
+
 model User {
   id             String             @id @default(uuid())
   email          String             @unique
@@ -67,6 +75,7 @@ model Restaurant {
   suppliers           Supplier[]
   invoices            SupplierInvoice[]
   inventoryItems      InventoryItem[]
+  inventorySessions   InventoryCountSession[]
   recipes             Recipe[]
   subRecipes          SubRecipe[]
   temperatureLogs     TemperatureLog[]
@@ -166,6 +175,7 @@ model InventoryItem {
   restaurant     Restaurant      @relation(fields: [restaurantId], references: [id])
   supplier       Supplier?       @relation(fields: [supplierId], references: [id])
   movements      StockMovement[]
+  countLines     InventoryCountLine[]
 }
 
 model StockMovement {
@@ -177,6 +187,36 @@ model StockMovement {
   note            String?
   createdAt       DateTime          @default(now())
   item            InventoryItem     @relation(fields: [inventoryItemId], references: [id])
+}
+
+model InventoryCountSession {
+  id           String                 @id @default(uuid())
+  restaurantId String
+  name         String
+  status       InventorySessionStatus @default(DRAFT)
+  storageArea  String?
+  startedAt    DateTime?
+  validatedAt  DateTime?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  restaurant   Restaurant             @relation(fields: [restaurantId], references: [id])
+  lines        InventoryCountLine[]
+}
+
+model InventoryCountLine {
+  id              String                @id @default(uuid())
+  sessionId       String
+  inventoryItemId String
+  expectedQty     Decimal               @default(0) @db.Decimal(12, 3)
+  countedQty      Decimal?              @db.Decimal(12, 3)
+  varianceQty     Decimal               @default(0) @db.Decimal(12, 3)
+  note            String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  session         InventoryCountSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  item            InventoryItem         @relation(fields: [inventoryItemId], references: [id])
+
+  @@unique([sessionId, inventoryItemId])
 }
 
 model Recipe {

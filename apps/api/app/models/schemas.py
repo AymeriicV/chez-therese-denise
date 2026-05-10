@@ -80,6 +80,17 @@ class StockMovementCreate(BaseModel):
     note: str | None = None
 
 
+class InventorySessionCreate(BaseModel):
+    name: str
+    storage_area: str | None = None
+    item_ids: list[str] = []
+
+
+class InventoryCountUpdate(BaseModel):
+    counted_qty: Decimal
+    note: str | None = None
+
+
 class TemperatureCreate(BaseModel):
     equipment: str
     value_celsius: Decimal

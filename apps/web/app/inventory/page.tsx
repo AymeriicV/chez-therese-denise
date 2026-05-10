@@ -1,6 +1,5 @@
-import { ModulePage } from "@/components/modules/module-page";
-import { getModuleByHref } from "@/lib/modules";
+import { InventoryClient } from "./inventory-client";
 
 export default function Page() {
-  return <ModulePage module={getModuleByHref("/inventory")!} />;
+  return <InventoryClient />;
 }

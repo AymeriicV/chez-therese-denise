@@ -27,6 +27,7 @@ Pour reprendre apres interruption:
 - [x] 06 - OCR factures fournisseurs de bout en bout
 - [x] 07 - Gestion fournisseurs de bout en bout
 - [x] 08 - Stocks intelligents de bout en bout
+- [x] 09 - Inventaires de bout en bout
 
 ## Modules cible
 
@@ -34,7 +35,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-08 - Stocks intelligents de bout en bout.
+09 - Inventaires de bout en bout.
 
 ## Commandes etape 02
 
@@ -125,6 +126,20 @@ open http://localhost:3000/stock
 - API: synthese stock, alertes seuil, creation article, mouvements entrants/sortants et audit logs.
 - Frontend: page `/stock` premium mobile first avec recherche, valorisation, alertes rupture et actions rapides.
 
+## Commandes etape 09
+
+```bash
+docker compose up --build
+pnpm --filter @ctd/db prisma:migrate
+open http://localhost:3000/inventory
+```
+
+## Etape 09 - Details
+
+- Prisma: ajout des sessions de comptage, lignes d'inventaire, statuts et relation avec les articles stock.
+- API: creation de sessions par zone ou articles, saisie des quantites comptees, calcul des ecarts, validation manager, ajustements stock et audit logs.
+- Frontend: page `/inventory` premium mobile first avec liste des sessions, comptage rapide, recherche de lignes, ecarts valorises et validation.
+
 ## Prochaine etape recommandee
 
-Brancher le module inventaires de bout en bout: sessions de comptage, ecarts, validation manager et ajustements stock.
+Brancher le module fiches techniques et sous-recettes de bout en bout: ingredients, rendements, couts matieres, marges et allergenes.
