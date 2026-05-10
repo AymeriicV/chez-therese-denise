@@ -14,4 +14,4 @@ COPY apps/web /app/apps/web
 
 WORKDIR /app/apps/web
 EXPOSE 3000
-CMD ["pnpm", "dev", "--hostname", "0.0.0.0"]
+CMD ["sh", "-c", "mkdir -p .next && find .next -mindepth 1 -maxdepth 1 -exec rm -rf {} + && pnpm dev --hostname 0.0.0.0"]
