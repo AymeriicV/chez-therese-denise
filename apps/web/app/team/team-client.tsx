@@ -36,7 +36,7 @@ type EmployeeForm = {
 
 const emptyForm: EmployeeForm = {
   email: "",
-  password: "",
+  password: "Employe123!",
   first_name: "",
   last_name: "",
   role: "EMPLOYEE",
@@ -83,7 +83,7 @@ export function TeamClient() {
   }
 
   function startCreate() {
-    setForm(emptyForm);
+    setForm({ ...emptyForm });
     setMode("create");
     setSuccess("");
   }
@@ -267,6 +267,7 @@ function Editor({
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <Field label="Email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} />
         <Field label="Mot de passe initial" value={form.password} type="password" onChange={(value) => setForm({ ...form, password: value })} />
+        <p className="text-xs text-foreground/55 sm:col-span-2">Minimum 8 caractères. Par défaut, la valeur proposée permet un test rapide local.</p>
         <Field label="Prénom" value={form.first_name} onChange={(value) => setForm({ ...form, first_name: value })} />
         <Field label="Nom" value={form.last_name} onChange={(value) => setForm({ ...form, last_name: value })} />
         <Field label="Poste" value={form.position} onChange={(value) => setForm({ ...form, position: value })} />

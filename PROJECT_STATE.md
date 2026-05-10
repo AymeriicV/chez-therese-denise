@@ -385,3 +385,26 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - Etiquette auto validee: 1 etiquette generee pour le lot avec DLC identique.
 - Tracabilite validee: consommation `Lieu noir`, `2 kg`, visible dans le lot de production.
 - Historique HACCP valide: tache de categorie `Production labo` creee pour le lot de test.
+
+## Etape 17 - Details
+
+- API team: messages de validation francais pour les erreurs Pydantic, avec 422 lisible sur la creation d'employe.
+- Frontend team: le mot de passe initial par defaut est `Employe123!` pour eviter les creations incompletes en local.
+- Planning backend: nouveau modele hebdomadaire `PlanningSchedule` / `PlanningScheduleDay` avec migration `20260510200000_planning_grid_weekly`.
+- Planning frontend: vue tableau type Excel avec colonnes Employe, Lundi a Dimanche, Total semaine et Objectif, plus vue mobile en cartes.
+- Planning UX: edition OWNER, lecture employe, copie de semaine precedente, duplication de jour, impression et gestion des jours de repos.
+- API planning: le service Docker a ete reconstruit pour charger le client Prisma regenere, ce qui a corrige le 500 sur `GET /planning`.
+
+## Validation etape 17
+
+- `python3 -m compileall -q apps/api`: OK.
+- `git diff --check`: OK.
+- `docker compose run --rm api prisma generate --schema /app/packages/db/prisma/schema.prisma`: OK.
+- `docker compose run --rm api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma`: OK, migration `20260510200000_planning_grid_weekly` appliquee.
+- `docker compose run --rm --no-deps web pnpm --filter @ctd/web build`: OK.
+- `docker compose up --build -d api web`: OK.
+- `docker compose exec api` login OWNER puis `POST /team/employees`: OK, creation employe de test sans 422 avec email valide.
+- `docker compose exec api` `GET /planning?target_date=2026-05-10`: OK, 3 lignes employees renvoyees.
+- `docker compose exec web node -e \"fetch('http://localhost:3000/planning',{redirect:'manual'})\"`: HTTP 200.
+- `docker compose exec web node -e \"fetch('http://localhost:3000/team',{redirect:'manual'})\"`: HTTP 200.
+- `docker compose exec web node -e \"fetch('http://localhost:3000/time-clock',{redirect:'manual'})\"`: HTTP 200.

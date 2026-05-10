@@ -21,6 +21,50 @@ export class ApiError extends Error {
   }
 }
 
+function labelForValidationField(field: string) {
+  const labels: Record<string, string> = {
+    email: "Email",
+    password: "Mot de passe initial",
+    first_name: "Prénom",
+    last_name: "Nom",
+    role: "Rôle",
+    position: "Poste",
+    phone: "Téléphone",
+    user_id: "Employé",
+    start_at: "Début",
+    end_at: "Fin",
+    break_minutes: "Pause",
+    comment: "Commentaire",
+    is_day_off: "Repos",
+    weekly_target_minutes: "Objectif hebdomadaire",
+    morning_start: "Matin début",
+    morning_end: "Matin fin",
+    evening_start: "Soir début",
+    evening_end: "Soir fin",
+    week_start: "Semaine",
+    day_date: "Jour",
+  };
+  return labels[field] ?? field.replaceAll("_", " ");
+}
+
+function friendlyValidationMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object") return fallback;
+  const detail = (payload as { detail?: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  if (!Array.isArray(detail)) return fallback;
+  const parts = detail
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const entry = item as { loc?: unknown; msg?: unknown };
+      const path = Array.isArray(entry.loc) ? entry.loc.map(String) : [];
+      const field = path[path.length - 1] ?? "champ";
+      const message = typeof entry.msg === "string" ? entry.msg : "valeur invalide";
+      return `${labelForValidationField(field)}: ${message}`;
+    })
+    .filter(Boolean);
+  return parts.length > 0 ? `Erreur de validation: ${parts.join(" / ")}` : fallback;
+}
+
 type ApiOptions = RequestInit & {
   authRequired?: boolean;
   skipJson?: boolean;
@@ -113,7 +157,12 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
     let message = `Erreur API ${response.status}`;
     try {
       const payload = await response.json();
-      message = typeof payload.detail === "string" ? payload.detail : message;
+      message =
+        response.status === 422
+          ? friendlyValidationMessage(payload, message)
+          : typeof payload.detail === "string"
+            ? payload.detail
+            : message;
     } catch {
       message = response.statusText || message;
     }

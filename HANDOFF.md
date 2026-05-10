@@ -69,6 +69,13 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - API production testee: ingredient `Lieu noir` ajoute a la fiche `Cote de boeuf`, production de `4` portions creee, stock `Lieu noir` de `11 kg` a `9 kg`, DLC auto au `13/05/2026 18:54`, etiquette auto et trace HACCP `Production labo`.
 - Pages `team`, `planning` et `time-clock` repondent `200` depuis le container Next avec fetch manuel.
 
+## Derniere correction
+
+- Creation d'employe: 422 rendu lisible en francais via le client API frontend, et le mot de passe initial local par defaut est `Employe123!`.
+- Planning: vue hebdomadaire remplacee par une grille type Excel, avec colonnes Employe / Lundi / Mardi / Mercredi / Jeudi / Vendredi / Samedi / Dimanche / Total semaine / Objectif.
+- Planning: le service API a ete reconstruit apres regeneration Prisma pour exposer `PlanningSchedule` et `PlanningScheduleDay` sans 500.
+- Planning: `GET /planning` renvoie maintenant les lignes du restaurant de test, et `team`, `planning`, `time-clock` repondent 200 depuis Next.
+
 ## Prochaine reprise
 
 Continuer avec commandes fournisseurs, ou reprendre sous-recettes avancees, couts matieres, marges et allergenes consolides. Garder la meme regle: aucun bouton decoratif, mutations branchees API, erreurs visibles et state UI mis a jour depuis les reponses backend.

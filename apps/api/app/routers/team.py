@@ -32,7 +32,7 @@ async def create_employee(payload: EmployeeCreate, ctx=Depends(require_roles("OW
     email = payload.email.lower()
     existing = await db.user.find_unique(where={"email": email})
     if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cet email est déjà utilisé")
     user = await db.user.create(
         data={
             "email": email,
@@ -157,7 +157,7 @@ async def _get_membership(user_id: str, restaurant_id: str):
         include={"user": {"include": {"employeeProfile": True, "timeClockLogs": True, "shifts": True}}},
     )
     if not membership:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employé introuvable")
     return membership
 
 

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -79,6 +79,30 @@ class TimeClockCorrectionCreate(BaseModel):
     clock_out: datetime | None = None
     reason: str = Field(min_length=3, max_length=500)
     note: str | None = None
+
+
+class PlanningCellUpsert(BaseModel):
+    user_id: str
+    week_start: datetime
+    weekday: int = Field(ge=0, le=6)
+    morning_start: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    morning_end: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    break_minutes: int = Field(default=0, ge=0, le=720)
+    evening_start: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    evening_end: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    is_day_off: bool = False
+    weekly_target_minutes: int = Field(default=0, ge=0, le=6000)
+    position: str = Field(min_length=2, max_length=120)
+    comment: str | None = None
+
+
+class PlanningCopyRequest(BaseModel):
+    target_date: date
+
+
+class PlanningDuplicateDayRequest(BaseModel):
+    source_date: date
+    target_date: date
 
 
 class SupplierCreate(BaseModel):

@@ -61,6 +61,7 @@ model User {
   memberships    RestaurantMember[]
   employeeProfile EmployeeProfile?
   shifts         Shift[]
+  planningSchedules PlanningSchedule[]
   auditLogs      AuditLog[]
   timeClockLogs  TimeClockLog[]
   timeClockCorrectionsMade TimeClockCorrectionLog[] @relation("TimeClockCorrectionByUser")
@@ -94,6 +95,7 @@ model Restaurant {
   companySettings     CompanySettings?
   employeeProfiles    EmployeeProfile[]
   shifts              Shift[]
+  planningSchedules   PlanningSchedule[]
   timeClockLogs       TimeClockLog[]
   timeClockCorrections TimeClockCorrectionLog[]
 }
@@ -554,6 +556,44 @@ model Shift {
   user         User       @relation(fields: [userId], references: [id])
 
   @@unique([restaurantId, userId, startAt])
+}
+
+model PlanningSchedule {
+  id                  String               @id @default(uuid())
+  restaurantId        String
+  userId              String
+  weekStart           DateTime
+  weeklyTargetMinutes Int                  @default(0)
+  position            String
+  comment             String?
+  isDayOff            Boolean              @default(false)
+  isArchived          Boolean              @default(false)
+  archivedAt          DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  restaurant          Restaurant           @relation(fields: [restaurantId], references: [id])
+  user                User                 @relation(fields: [userId], references: [id])
+  days                PlanningScheduleDay[]
+
+  @@unique([restaurantId, userId, weekStart])
+}
+
+model PlanningScheduleDay {
+  id                String            @id @default(uuid())
+  planningScheduleId String
+  weekday           Int
+  morningStart      String?
+  morningEnd        String?
+  breakMinutes      Int               @default(0)
+  eveningStart      String?
+  eveningEnd        String?
+  isDayOff          Boolean           @default(false)
+  comment           String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  schedule          PlanningSchedule  @relation(fields: [planningScheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([planningScheduleId, weekday])
 }
 
 model TimeClockCorrectionLog {
