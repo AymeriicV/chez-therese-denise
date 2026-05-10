@@ -131,6 +131,16 @@ class RecipeIngredientCreate(BaseModel):
     waste_rate: Decimal = Decimal("0")
 
 
+class RecipeIngredientUpdate(BaseModel):
+    inventory_item_id: str | None = None
+    sub_recipe_id: str | None = None
+    name: str | None = None
+    quantity: Decimal | None = None
+    unit: str | None = None
+    unit_cost: Decimal | None = None
+    waste_rate: Decimal | None = None
+
+
 class SubRecipeCreate(BaseModel):
     name: str
     category: str | None = None

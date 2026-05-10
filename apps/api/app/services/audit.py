@@ -1,3 +1,5 @@
+from prisma import Json
+
 from app.db.prisma import db
 
 
@@ -10,13 +12,14 @@ async def write_audit_log(
     entity_id: str | None = None,
     metadata: dict | None = None,
 ) -> None:
-    await db.auditlog.create(
-        data={
-            "restaurantId": restaurant_id,
-            "userId": user_id,
-            "action": action,
-            "entity": entity,
-            "entityId": entity_id,
-            "metadata": metadata,
-        }
-    )
+    data = {
+        "action": action,
+        "entity": entity,
+        "entityId": entity_id,
+        "metadata": Json(metadata or {}),
+    }
+    if restaurant_id:
+        data["restaurant"] = {"connect": {"id": restaurant_id}}
+    if user_id:
+        data["user"] = {"connect": {"id": user_id}}
+    await db.auditlog.create(data=data)

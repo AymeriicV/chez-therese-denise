@@ -75,15 +75,18 @@ export function InvoicesClient() {
     setError("");
     try {
       let firstId = "";
+      const uploaded: Invoice[] = [];
       for (const file of Array.from(files)) {
         const formData = new FormData();
         formData.append("file", file);
         const invoice = await apiRequest<Invoice>("/invoices/upload", { method: "POST", body: formData });
         firstId ||= invoice.id;
+        uploaded.push(invoice);
       }
-      await loadInvoices(firstId);
+      setInvoices((current) => [...uploaded, ...current]);
+      setSelectedId(firstId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload impossible");
+      setError(err instanceof Error ? err.message : "Import impossible");
     } finally {
       setSaving(false);
       if (inputRef.current) inputRef.current.value = "";

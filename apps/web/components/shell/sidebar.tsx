@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: Home },
+  { href: "/dashboard", label: "Tableau de bord", icon: Home },
   { href: "/invoices", label: "OCR factures", icon: FileScan },
   { href: "/suppliers", label: "Fournisseurs", icon: Truck },
   { href: "/stock", label: "Stocks", icon: Boxes },
@@ -32,10 +32,10 @@ const navItems = [
   { href: "/haccp", label: "HACCP", icon: ShieldCheck },
   { href: "/production", label: "Production", icon: PackageCheck },
   { href: "/planning", label: "Planning", icon: CalendarDays },
-  { href: "/team", label: "Equipe", icon: Users },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/team", label: "Équipe", icon: Users },
+  { href: "/analytics", label: "Analyses", icon: BarChart3 },
   { href: "/ai", label: "IA", icon: Sparkles },
-  { href: "/settings", label: "Parametres", icon: Settings },
+  { href: "/settings", label: "Paramètres", icon: Settings },
 ];
 
 export function Sidebar() {
@@ -47,10 +47,10 @@ export function Sidebar() {
       <aside className="hidden h-screen w-72 shrink-0 border-r border-border bg-background px-3 py-4 lg:sticky lg:top-0 lg:flex lg:flex-col">
         <div className="mb-6 flex items-center gap-3 px-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-foreground text-sm font-semibold text-background">
-            CTD
+            <img src="/logo.png" alt="Chez Thérèse & Denise" className="h-12 w-12 rounded-full object-contain"/>
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">Chez Therese et Denise</p>
+            <p className="truncate text-sm font-semibold">Chez Thérèse et Denise</p>
             <p className="truncate text-xs text-foreground/55">Restaurant principal</p>
           </div>
         </div>

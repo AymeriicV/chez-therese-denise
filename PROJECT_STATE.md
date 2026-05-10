@@ -30,6 +30,7 @@ Pour reprendre apres interruption:
 - [x] 09 - Inventaires de bout en bout
 - [x] 10 - Fiches techniques et sous-recettes de bout en bout
 - [x] 11 - Durcissement bloc 1 suppliers, stock, invoices, inventory
+- [x] 12 - UI FR, allergenes automatiques, fiches techniques exploitables et archivage
 
 ## Modules cible
 
@@ -37,7 +38,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-11 - Durcissement bloc 1 suppliers, stock, invoices, inventory.
+Improve French UI, allergens and recipe workflow.
 
 ## Commandes etape 02
 
@@ -198,14 +199,24 @@ docker compose exec -T web pnpm --filter @ctd/web build
 
 ## Acces local
 
-Un administrateur local est cree automatiquement au demarrage de l'API en `APP_ENV=local` si aucun compte avec cet email n'existe:
+Un administrateur local est cree ou mis a jour automatiquement au demarrage de l'API en `APP_ENV=local`:
 
-- Email: `admin@ctd-app.fr`
-- Mot de passe: `ChangeMeLocal123!`
+- Email: `aymericvenacterpro@gmail.com`
+- Mot de passe: `admin`
 - Role: `OWNER`
 - Restaurant: `Chez Therese et Denise`
 
-Ces valeurs peuvent etre surchargees avec `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` et `SEED_LOCAL_ADMIN=false`.
+Ce compte est strictement reserve au developpement local. Ne jamais utiliser le mot de passe `admin` en production.
+
+Le seed ajoute aussi l'article stock local:
+
+- Nom: `Lieu noir`
+- Categorie: `Poisson`
+- Unite: `kg`
+- SKU: `1`
+- Zone: `Chambre froide`
+- Quantite: `11`
+- Allergene detecte: `Poisson`
 
 ## Correctifs auth frontend
 
@@ -216,4 +227,31 @@ Ces valeurs peuvent etre surchargees avec `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWO
 
 ## Prochaine etape recommandee
 
-Commiter et pousser l'etape 11, puis reprendre le bloc 2 avec recipes, sub-recipes, food-cost, margins et allergens.
+Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergenes avances.
+
+## Etape 12 - Details
+
+- API: detection automatique des allergenes stock depuis nom et categorie, avec stockage des allergenes detectes.
+- API: migration Prisma `20260510123000_allergens_archives` pour `autoAllergens`, `isActive` et `archivedAt`.
+- API: archivage fournisseurs, articles stock, fiches techniques et sous-recettes avec audit logs.
+- API: modification des lignes ingredients de fiches techniques et recalcul cout matiere, cout portion, marge et allergenes.
+- API: audit logs corriges via le service central compatible Prisma Python regenere.
+- Frontend: mutations fournisseurs, stock, inventaire, factures et recettes mettent a jour le state depuis la reponse API pour eviter les faux `Failed to fetch`.
+- Frontend: page stock traduite, badges de detection automatique, archivage avec confirmation et filtre archivés.
+- Frontend: page fournisseurs avec archivage DELETE, filtre archivés, messages succes/erreur.
+- Frontend: page fiches techniques exploitable: creation fiche, ajout/modification/suppression ingredient stock, cout ligne, cout total, cout portion, marge et allergenes.
+- Frontend: libelles principaux traduits en francais et suppression du bouton decoratif generique des pages module.
+
+## Validation etape 12
+
+- `python3 -m compileall -q apps/api`: OK.
+- `docker compose config`: OK.
+- `docker compose run --rm api prisma generate --schema /app/packages/db/prisma/schema.prisma`: OK.
+- `docker compose run --rm api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma`: OK, migration `20260510123000_allergens_archives` appliquee.
+- `docker compose run --rm --no-deps web pnpm --filter @ctd/web build`: OK.
+- `docker compose up --build -d`: OK.
+- `curl http://localhost:8000/health`: OK.
+- `curl -I http://localhost:3000/dashboard`: HTTP 200.
+- Login local `aymericvenacterpro@gmail.com / admin`: OK.
+- Endpoints valides avec JWT et `X-Restaurant-Id`: fournisseurs, stock, recettes.
+- Parcours API valide: creation/archive fournisseur, creation/archive article stock avec allergene Poisson, creation fiche technique, ajout/modification ingredient Lieu noir, recalcul couts/marge/allergenes, archivage fiche.

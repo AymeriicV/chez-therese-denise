@@ -40,9 +40,9 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-8 text-foreground">
       <Card className="w-full max-w-sm p-5">
         <div className="mb-6">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-foreground font-semibold text-background">CTD</div>
+          <img src="/logo.png" alt="Chez Thérèse & Denise" className="mb-4 h-16 w-16 rounded-full object-contain"/>
           <h1 className="text-2xl font-semibold">Connexion</h1>
-          <p className="mt-2 text-sm text-foreground/55">Chez Therese et Denise</p>
+          <p className="mt-2 text-sm text-foreground/55">Chez Thérèse et Denise</p>
         </div>
         <form className="space-y-3" onSubmit={submit}>
           {error ? <p className="rounded-md bg-muted px-3 py-2 text-sm text-foreground">{error}</p> : null}

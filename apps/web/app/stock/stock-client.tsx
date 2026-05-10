@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, Boxes, Loader2, Pencil, Plus, Save, Search, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowDown, ArrowUp, Boxes, Loader2, Pencil, Plus, Save, Search, Sparkles, X } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Topbar } from "@/components/shell/topbar";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ type StockItem = {
   average_cost: string;
   stock_value: string;
   allergens: string[];
+  auto_allergens: string[];
+  is_active: boolean;
   is_below_reorder_point: boolean;
   movement_count: number;
 };
@@ -50,6 +52,18 @@ const emptyForm: StockForm = {
   allergens: "",
 };
 
+const fieldLabels: Record<keyof StockForm, string> = {
+  name: "Nom",
+  category: "Catégorie",
+  unit: "Unité",
+  sku: "SKU",
+  storage_area: "Zone de stockage",
+  quantity_on_hand: "Quantité en stock",
+  reorder_point: "Seuil de réapprovisionnement",
+  average_cost: "Coût moyen",
+  allergens: "Allergènes",
+};
+
 export function StockClient() {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<StockItem[]>([]);
@@ -59,6 +73,8 @@ export function StockClient() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
 
   const filtered = useMemo(
     () => items.filter((item) => `${item.name} ${item.category} ${item.supplier_name ?? ""}`.toLowerCase().includes(query.toLowerCase())),
@@ -70,13 +86,13 @@ export function StockClient() {
 
   useEffect(() => {
     void loadItems();
-  }, []);
+  }, [showArchived]);
 
   async function loadItems(selectId?: string) {
     setLoading(true);
     setError("");
     try {
-      const data = await apiRequest<StockItem[]>("/inventory");
+      const data = await apiRequest<StockItem[]>(`/inventory${showArchived ? "?include_archived=true" : ""}`);
       setItems(data);
       setSelectedId(selectId ?? data[0]?.id ?? "");
     } catch (err) {
@@ -89,6 +105,7 @@ export function StockClient() {
   function startCreate() {
     setForm(emptyForm);
     setMode("create");
+    setSuccess("");
   }
 
   function startEdit(item: StockItem) {
@@ -105,21 +122,23 @@ export function StockClient() {
     });
     setSelectedId(item.id);
     setMode("edit");
+    setSuccess("");
   }
 
   async function saveItem() {
     setError("");
+    setSuccess("");
     if (!form.name.trim() || !form.category.trim() || !form.unit.trim()) {
-      setError("Nom, categorie et unite sont obligatoires.");
+      setError("Nom, catégorie et unité sont obligatoires.");
       return;
     }
     for (const [label, value] of [
-      ["quantite", form.quantity_on_hand],
+      ["quantité", form.quantity_on_hand],
       ["seuil", form.reorder_point],
-      ["cout moyen", form.average_cost],
+      ["coût moyen", form.average_cost],
     ]) {
       if (Number.isNaN(Number(value)) || Number(value) < 0) {
-        setError(`Le champ ${label} doit etre un nombre positif.`);
+        setError(`Le champ ${label} doit être un nombre positif.`);
         return;
       }
     }
@@ -136,12 +155,19 @@ export function StockClient() {
       allergens: form.allergens.split(",").map((item) => item.trim()).filter(Boolean),
     };
     try {
-      const saved = await apiRequest<StockItem>(mode === "edit" && selected ? `/inventory/${selected.id}` : "/inventory", {
+      const isEdit = mode === "edit" && selected;
+      const saved = await apiRequest<StockItem>(isEdit ? `/inventory/${selected.id}` : "/inventory", {
         method: mode === "edit" ? "PATCH" : "POST",
         body: JSON.stringify(payload),
       });
+      setItems((current) => {
+        const exists = current.some((item) => item.id === saved.id);
+        if (exists) return current.map((item) => (item.id === saved.id ? saved : item));
+        return [saved, ...current];
+      });
+      setSelectedId(saved.id);
       setMode("idle");
-      await loadItems(saved.id);
+      setSuccess(isEdit ? "Article mis à jour." : "Article créé.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sauvegarde impossible");
     } finally {
@@ -163,9 +189,43 @@ export function StockClient() {
           note: quantity > 0 ? "Entree stock web" : "Sortie stock web",
         }),
       });
-      await loadItems(item.id);
+      setItems((current) =>
+        current.map((entry) => {
+          if (entry.id !== item.id) return entry;
+          const nextQuantity = Math.max(0, Number(entry.quantity_on_hand) + quantity);
+          const nextValue = nextQuantity * Number(entry.average_cost || 0);
+          return {
+            ...entry,
+            quantity_on_hand: String(nextQuantity),
+            stock_value: String(nextValue),
+            is_below_reorder_point: nextQuantity <= Number(entry.reorder_point || 0),
+            movement_count: entry.movement_count + 1,
+          };
+        }),
+      );
+      setSuccess(quantity > 0 ? "Entrée stock enregistrée." : "Sortie stock enregistrée.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Mouvement impossible");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function archiveItem(item: StockItem) {
+    if (!window.confirm(`Archiver l'article "${item.name}" ?`)) return;
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      const archived = await apiRequest<StockItem>(`/inventory/${item.id}`, { method: "DELETE" });
+      setItems((current) => {
+        const updated = current.map((entry) => (entry.id === archived.id ? archived : entry));
+        return showArchived ? updated : updated.filter((entry) => entry.is_active);
+      });
+      setSelectedId((current) => (current === archived.id ? "" : current));
+      setSuccess("Article archivé.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Archivage impossible");
     } finally {
       setSaving(false);
     }
@@ -187,6 +247,7 @@ export function StockClient() {
         </section>
 
         {error ? <p className="rounded-md bg-muted px-3 py-2 text-sm text-foreground">{error}</p> : null}
+        {success ? <p className="rounded-md bg-foreground px-3 py-2 text-sm text-background">{success}</p> : null}
 
         <section className="grid gap-3 sm:grid-cols-4">
           <Metric label="Valeur stock" value={`${Math.round(stockValue).toLocaleString("fr-FR")} EUR`} />
@@ -202,6 +263,10 @@ export function StockClient() {
                 <Search className="h-4 w-4 text-foreground/45" />
                 <input className="min-w-0 flex-1 bg-transparent text-sm outline-none" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher un article" />
               </div>
+              <label className="mt-3 flex items-center gap-2 text-xs text-foreground/60">
+                <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
+                Afficher les archivés
+              </label>
             </div>
             <div className="divide-y divide-border">
               {loading ? <StateLine text="Chargement stock" /> : null}
@@ -215,6 +280,12 @@ export function StockClient() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{item.name}</p>
                       <p className="truncate text-xs text-foreground/55">{item.category} - {item.supplier_name ?? "Sans fournisseur"} - {item.storage_area ?? "Sans zone"}</p>
+                      {item.auto_allergens.length > 0 ? (
+                        <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-foreground px-2 py-0.5 text-xs text-background">
+                          <Sparkles className="h-3 w-3" />
+                          Détection automatique: {item.auto_allergens.join(", ")}
+                        </p>
+                      ) : null}
                     </div>
                   </button>
                   <div>
@@ -223,8 +294,9 @@ export function StockClient() {
                   </div>
                   <div className="flex gap-2 sm:justify-end">
                     <Button variant="secondary" size="icon" aria-label="Modifier" onClick={() => startEdit(item)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="secondary" size="icon" aria-label="Sortie stock" disabled={saving} onClick={() => move(item, -1)}><ArrowDown className="h-4 w-4" /></Button>
-                    <Button variant="secondary" size="icon" aria-label="Entree stock" disabled={saving} onClick={() => move(item, 1)}><ArrowUp className="h-4 w-4" /></Button>
+                    <Button variant="secondary" size="icon" aria-label="Sortie stock" disabled={saving || !item.is_active} onClick={() => move(item, -1)}><ArrowDown className="h-4 w-4" /></Button>
+                    <Button variant="secondary" size="icon" aria-label="Entrée stock" disabled={saving || !item.is_active} onClick={() => move(item, 1)}><ArrowUp className="h-4 w-4" /></Button>
+                    <Button variant="secondary" size="icon" aria-label="Archiver" disabled={saving || !item.is_active} onClick={() => archiveItem(item)}><Archive className="h-4 w-4" /></Button>
                   </div>
                 </div>
               ))}
@@ -272,10 +344,13 @@ function StockEditor({ form, setForm, saving, onCancel, onSave }: { form: StockF
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {(Object.keys(form) as Array<keyof StockForm>).map((key) => (
           <label key={key} className="grid gap-1 text-sm">
-            <span className="text-xs capitalize text-foreground/55">{key.replaceAll("_", " ")}</span>
+            <span className="text-xs text-foreground/55">{fieldLabels[key]}</span>
             <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" type={["quantity_on_hand", "reorder_point", "average_cost"].includes(key) ? "number" : "text"} value={form[key]} onChange={(event) => setField(key, event.target.value)} />
           </label>
         ))}
+        <p className="sm:col-span-2 text-xs text-foreground/55">
+          Les allergènes détectés automatiquement depuis le nom et la catégorie sont ajoutés à la sauvegarde. Vous pouvez ajouter des allergènes manuels séparés par des virgules.
+        </p>
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={onCancel}>Annuler</Button>

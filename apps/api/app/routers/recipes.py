@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -6,11 +7,13 @@ from app.db.prisma import db
 from app.models.schemas import (
     RecipeCreate,
     RecipeIngredientCreate,
+    RecipeIngredientUpdate,
     RecipeUpdate,
     SubRecipeCreate,
     SubRecipeUpdate,
 )
 from app.routers.deps import get_restaurant_context, require_roles
+from app.services.audit import write_audit_log
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
@@ -112,7 +115,7 @@ async def update_sub_recipe(
 @router.delete("/sub-recipes/{sub_recipe_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def archive_sub_recipe(sub_recipe_id: str, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER"))):
     await _get_sub_recipe(sub_recipe_id, ctx["restaurant_id"])
-    await db.subrecipe.update(where={"id": sub_recipe_id}, data={"isActive": False})
+    await db.subrecipe.update(where={"id": sub_recipe_id}, data={"isActive": False, "archivedAt": datetime.now(UTC)})
     await _audit(ctx, "recipes.sub_recipe_archived", "SubRecipe", sub_recipe_id)
 
 
@@ -192,7 +195,7 @@ async def update_recipe(
 @router.delete("/{recipe_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def archive_recipe(recipe_id: str, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER"))):
     await _get_recipe(recipe_id, ctx["restaurant_id"])
-    await db.recipe.update(where={"id": recipe_id}, data={"isActive": False})
+    await db.recipe.update(where={"id": recipe_id}, data={"isActive": False, "archivedAt": datetime.now(UTC)})
     await _audit(ctx, "recipes.recipe_archived", "Recipe", recipe_id)
 
 
@@ -213,6 +216,60 @@ async def add_recipe_ingredient(
         ingredient.id,
         {"recipeId": recipe_id},
     )
+    return _serialize_recipe(recipe)
+
+
+@router.patch("/{recipe_id}/ingredients/{ingredient_id}")
+async def update_recipe_ingredient(
+    recipe_id: str,
+    ingredient_id: str,
+    payload: RecipeIngredientUpdate,
+    ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF")),
+):
+    await _get_recipe(recipe_id, ctx["restaurant_id"])
+    ingredient = await db.recipeingredient.find_first(where={"id": ingredient_id, "recipeId": recipe_id})
+    if not ingredient:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipe ingredient not found")
+
+    if {"inventory_item_id", "sub_recipe_id"} & payload.model_fields_set:
+        rebuilt = await _build_recipe_ingredient_data(
+            recipe_id,
+            RecipeIngredientCreate(
+                inventory_item_id=payload.inventory_item_id,
+                sub_recipe_id=payload.sub_recipe_id,
+                name=payload.name or ingredient.name,
+                quantity=payload.quantity or ingredient.quantity,
+                unit=payload.unit,
+                unit_cost=payload.unit_cost,
+                waste_rate=payload.waste_rate if payload.waste_rate is not None else ingredient.wasteRate,
+            ),
+            ctx["restaurant_id"],
+        )
+        rebuilt.pop("recipeId", None)
+        if payload.inventory_item_id:
+            rebuilt["subRecipeId"] = None
+        if payload.sub_recipe_id:
+            rebuilt["inventoryItemId"] = None
+        await db.recipeingredient.update(where={"id": ingredient_id}, data=rebuilt)
+    else:
+        quantity = payload.quantity if payload.quantity is not None else ingredient.quantity
+        unit_cost = payload.unit_cost if payload.unit_cost is not None else ingredient.unitCostSnapshot
+        waste_rate = payload.waste_rate if payload.waste_rate is not None else ingredient.wasteRate
+        data = {
+            "name": payload.name,
+            "quantity": quantity,
+            "unit": payload.unit,
+            "unitCostSnapshot": unit_cost,
+            "wasteRate": waste_rate,
+            "totalCost": _line_cost(quantity, unit_cost, waste_rate),
+        }
+        await db.recipeingredient.update(
+            where={"id": ingredient_id},
+            data={key: value for key, value in data.items() if value is not None},
+        )
+
+    recipe = await _recalculate_recipe(recipe_id, ctx)
+    await _audit(ctx, "recipes.ingredient_updated", "RecipeIngredient", ingredient_id, {"recipeId": recipe_id})
     return _serialize_recipe(recipe)
 
 
@@ -522,13 +579,11 @@ def _ingredient_allergens(ingredient):
 
 
 async def _audit(ctx, action: str, entity: str, entity_id: str, metadata: dict | None = None):
-    await db.auditlog.create(
-        data={
-            "restaurantId": ctx["restaurant_id"],
-            "userId": ctx["user"].id,
-            "action": action,
-            "entity": entity,
-            "entityId": entity_id,
-            "metadata": metadata,
-        }
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action=action,
+        entity=entity,
+        entity_id=entity_id,
+        metadata=metadata,
     )

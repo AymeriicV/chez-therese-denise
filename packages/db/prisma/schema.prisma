@@ -111,6 +111,7 @@ model Supplier {
   rating       Decimal?          @db.Decimal(3, 2)
   leadTimeDays Int               @default(2)
   isActive     Boolean           @default(true)
+  archivedAt   DateTime?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   restaurant   Restaurant        @relation(fields: [restaurantId], references: [id])
@@ -170,6 +171,9 @@ model InventoryItem {
   reorderPoint   Decimal         @default(0) @db.Decimal(12, 3)
   averageCost    Decimal         @default(0) @db.Decimal(12, 4)
   allergens      String[]        @default([])
+  autoAllergens  String[]        @default([])
+  isActive       Boolean         @default(true)
+  archivedAt     DateTime?
   lastCountedAt  DateTime?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
@@ -235,6 +239,7 @@ model Recipe {
   allergens      String[]           @default([])
   instructions   String?
   isActive       Boolean            @default(true)
+  archivedAt     DateTime?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   restaurant     Restaurant         @relation(fields: [restaurantId], references: [id])
@@ -253,6 +258,7 @@ model SubRecipe {
   allergens      String[]              @default([])
   instructions   String?
   isActive       Boolean               @default(true)
+  archivedAt     DateTime?
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   restaurant     Restaurant            @relation(fields: [restaurantId], references: [id])

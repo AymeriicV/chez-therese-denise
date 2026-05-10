@@ -74,10 +74,20 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (restaurantId) headers.set("X-Restaurant-Id", restaurantId);
 
-  const response = await fetch(`${getApiUrl()}/api/v1${path}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${getApiUrl()}/api/v1${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    throw new ApiError(
+      error instanceof Error && error.message !== "Failed to fetch"
+        ? error.message
+        : "Connexion API impossible. Vérifiez le réseau ou réessayez.",
+      0,
+    );
+  }
   if (response.status === 401 && authRequired) {
     clearStoredSession();
     redirectToLogin();

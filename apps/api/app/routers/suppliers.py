@@ -1,6 +1,7 @@
 from decimal import Decimal
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.db.prisma import db
 from app.models.schemas import SupplierCreate, SupplierUpdate
@@ -11,9 +12,12 @@ router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 
 
 @router.get("")
-async def list_suppliers(ctx=Depends(get_restaurant_context)):
+async def list_suppliers(include_archived: bool = Query(False), ctx=Depends(get_restaurant_context)):
+    where = {"restaurantId": ctx["restaurant_id"]}
+    if not include_archived:
+        where["isActive"] = True
     suppliers = await db.supplier.find_many(
-        where={"restaurantId": ctx["restaurant_id"]},
+        where=where,
         include={"invoices": True},
         order={"name": "asc"},
     )
@@ -99,7 +103,7 @@ async def archive_supplier(supplier_id: str, ctx=Depends(require_roles("OWNER", 
     supplier = await _get_supplier(supplier_id, ctx["restaurant_id"])
     updated = await db.supplier.update(
         where={"id": supplier.id},
-        data={"isActive": False},
+        data={"isActive": False, "archivedAt": datetime.now(UTC)},
         include={"invoices": True},
     )
     await write_audit_log(
@@ -110,6 +114,11 @@ async def archive_supplier(supplier_id: str, ctx=Depends(require_roles("OWNER", 
         entity_id=supplier.id,
     )
     return _serialize_supplier(updated)
+
+
+@router.delete("/{supplier_id}")
+async def delete_supplier(supplier_id: str, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER"))):
+    return await archive_supplier(supplier_id, ctx)
 
 
 async def _get_supplier(supplier_id: str, restaurant_id: str):

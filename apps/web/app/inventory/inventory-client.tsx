@@ -80,12 +80,17 @@ export function InventoryClient() {
         method: "POST",
         body: JSON.stringify({ name: newName.trim(), storage_area: newArea.trim() || null, item_ids: [] }),
       });
+      setSessions((current) => [session, ...current]);
+      setSelectedId(session.id);
+      setDraftCounts((values) => ({
+        ...values,
+        ...Object.fromEntries(session.lines.map((line) => [line.id, line.counted_qty ?? line.expected_qty])),
+      }));
       setCreating(false);
       setNewName("");
       setNewArea("");
-      await loadSessions(session.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Creation session impossible");
+      setError(err instanceof Error ? err.message : "Création session impossible");
     } finally {
       setSaving(false);
     }
@@ -101,11 +106,22 @@ export function InventoryClient() {
     }
     setSaving(true);
     try {
-      await apiRequest(`/inventory/sessions/${selected.id}/lines/${line.id}`, {
+      const updatedLine = await apiRequest<CountLine>(`/inventory/sessions/${selected.id}/lines/${line.id}`, {
         method: "PATCH",
         body: JSON.stringify({ counted_qty: countedQty, note: line.note }),
       });
-      await loadSessions(selected.id);
+      setSessions((current) =>
+        current.map((session) =>
+          session.id === selected.id
+            ? {
+                ...session,
+                status: "REVIEW",
+                counted_line_count: session.lines.filter((entry) => (entry.id === updatedLine.id ? updatedLine.counted_qty : entry.counted_qty) !== null).length,
+                lines: session.lines.map((entry) => (entry.id === updatedLine.id ? updatedLine : entry)),
+              }
+            : session,
+        ),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Saisie impossible");
     } finally {
@@ -119,7 +135,8 @@ export function InventoryClient() {
     setError("");
     try {
       const session = await apiRequest<CountSession>(`/inventory/sessions/${selected.id}/validate`, { method: "POST" });
-      await loadSessions(session.id);
+      setSessions((current) => current.map((entry) => (entry.id === session.id ? session : entry)));
+      setSelectedId(session.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Validation impossible");
     } finally {
@@ -153,7 +170,7 @@ export function InventoryClient() {
               <input className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none" value={newArea} onChange={(event) => setNewArea(event.target.value)} placeholder="Zone optionnelle" />
               <div className="flex gap-2">
                 <Button variant="secondary" size="icon" onClick={() => setCreating(false)} aria-label="Annuler"><X className="h-4 w-4" /></Button>
-                <Button onClick={createSession} disabled={saving || !newName}><Save className="h-4 w-4" />Creer</Button>
+                <Button onClick={createSession} disabled={saving || !newName}><Save className="h-4 w-4" />Créer</Button>
               </div>
             </div>
           </Card>
@@ -217,7 +234,7 @@ export function InventoryClient() {
                         <div className="flex gap-2 sm:justify-end">
                           <Button variant="secondary" size="icon" aria-label="Diminuer" disabled={selected.status === "VALIDATED"} onClick={() => adjust(line, -1)}><Minus className="h-4 w-4" /></Button>
                           <Button variant="secondary" size="icon" aria-label="Augmenter" disabled={selected.status === "VALIDATED"} onClick={() => adjust(line, 1)}><Plus className="h-4 w-4" /></Button>
-                          <Button size="icon" aria-label="Sauver" disabled={saving || selected.status === "VALIDATED"} onClick={() => saveLine(line)}><Save className="h-4 w-4" /></Button>
+                          <Button size="icon" aria-label="Enregistrer" disabled={saving || selected.status === "VALIDATED"} onClick={() => saveLine(line)}><Save className="h-4 w-4" /></Button>
                         </div>
                       </div>
                     );

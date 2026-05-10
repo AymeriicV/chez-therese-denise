@@ -1,4 +1,5 @@
-import { Search, Upload } from "lucide-react";
+import Link from "next/link";
+import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function Topbar() {
@@ -9,12 +10,11 @@ export function Topbar() {
           <p className="text-xs text-foreground/55">Vendredi 8 mai 2026</p>
           <h1 className="truncate text-xl font-semibold lg:text-2xl">Pilotage restaurant</h1>
         </div>
-        <Button variant="secondary" size="icon" aria-label="Rechercher">
-          <Search className="h-4 w-4" />
-        </Button>
-        <Button className="hidden sm:inline-flex">
-          <Upload className="h-4 w-4" />
-          Importer
+        <Button asChild className="hidden sm:inline-flex">
+          <Link href="/invoices">
+            <Upload className="h-4 w-4" />
+            Importer
+          </Link>
         </Button>
       </div>
     </header>

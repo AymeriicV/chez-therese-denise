@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    title: "CTD",
+    title: "Chez Thérèse & Denise",
     statusBarStyle: "black-translucent",
   },
 };

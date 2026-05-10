@@ -65,6 +65,8 @@ export function SuppliersClient() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
 
   const filtered = useMemo(
     () => suppliers.filter((supplier) => `${supplier.name} ${supplier.categories.join(" ")}`.toLowerCase().includes(query.toLowerCase())),
@@ -74,13 +76,13 @@ export function SuppliersClient() {
 
   useEffect(() => {
     void loadSuppliers();
-  }, []);
+  }, [showArchived]);
 
   async function loadSuppliers(selectId?: string) {
     setLoading(true);
     setError("");
     try {
-      const data = await apiRequest<Supplier[]>("/suppliers");
+      const data = await apiRequest<Supplier[]>(`/suppliers${showArchived ? "?include_archived=true" : ""}`);
       setSuppliers(data);
       setSelectedId(selectId ?? data[0]?.id ?? "");
     } catch (err) {
@@ -93,6 +95,7 @@ export function SuppliersClient() {
   function startCreate() {
     setForm(emptyForm);
     setMode("create");
+    setSuccess("");
   }
 
   function startEdit() {
@@ -110,16 +113,18 @@ export function SuppliersClient() {
       rating: selected.rating ?? "",
     });
     setMode("edit");
+    setSuccess("");
   }
 
   async function saveSupplier() {
     setError("");
+    setSuccess("");
     if (!form.name.trim()) {
       setError("Le nom fournisseur est obligatoire.");
       return;
     }
     if (form.lead_time_days && Number.isNaN(Number(form.lead_time_days))) {
-      setError("Le delai doit etre un nombre.");
+      setError("Le délai doit être un nombre.");
       return;
     }
     if (form.minimum_order && Number.isNaN(Number(form.minimum_order))) {
@@ -144,12 +149,19 @@ export function SuppliersClient() {
       rating: form.rating || null,
     };
     try {
-      const saved = await apiRequest<Supplier>(mode === "edit" && selected ? `/suppliers/${selected.id}` : "/suppliers", {
+      const isEdit = mode === "edit" && selected;
+      const saved = await apiRequest<Supplier>(isEdit ? `/suppliers/${selected.id}` : "/suppliers", {
         method: mode === "edit" ? "PATCH" : "POST",
         body: JSON.stringify(payload),
       });
+      setSuppliers((current) => {
+        const exists = current.some((supplier) => supplier.id === saved.id);
+        if (exists) return current.map((supplier) => (supplier.id === saved.id ? saved : supplier));
+        return [saved, ...current];
+      });
+      setSelectedId(saved.id);
       setMode("idle");
-      await loadSuppliers(saved.id);
+      setSuccess(isEdit ? "Fournisseur mis à jour." : "Fournisseur créé.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sauvegarde impossible");
     } finally {
@@ -159,11 +171,18 @@ export function SuppliersClient() {
 
   async function archiveSelected() {
     if (!selected) return;
+    if (!window.confirm(`Archiver le fournisseur "${selected.name}" ?`)) return;
     setSaving(true);
     setError("");
+    setSuccess("");
     try {
-      const archived = await apiRequest<Supplier>(`/suppliers/${selected.id}/archive`, { method: "POST" });
-      setSuppliers((current) => current.map((supplier) => (supplier.id === archived.id ? archived : supplier)));
+      const archived = await apiRequest<Supplier>(`/suppliers/${selected.id}`, { method: "DELETE" });
+      setSuppliers((current) => {
+        const updated = current.map((supplier) => (supplier.id === archived.id ? archived : supplier));
+        return showArchived ? updated : updated.filter((supplier) => supplier.is_active);
+      });
+      setSelectedId((current) => (current === archived.id ? "" : current));
+      setSuccess("Fournisseur archivé.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Archivage impossible");
     } finally {
@@ -187,6 +206,7 @@ export function SuppliersClient() {
         </section>
 
         {error ? <p className="rounded-md bg-muted px-3 py-2 text-sm text-foreground">{error}</p> : null}
+        {success ? <p className="rounded-md bg-foreground px-3 py-2 text-sm text-background">{success}</p> : null}
 
         <section className="grid gap-4 xl:grid-cols-[0.95fr_1.45fr]">
           <Card className="overflow-hidden">
@@ -195,6 +215,10 @@ export function SuppliersClient() {
                 <Search className="h-4 w-4 text-foreground/45" />
                 <input className="min-w-0 flex-1 bg-transparent text-sm outline-none" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher" />
               </div>
+              <label className="mt-3 flex items-center gap-2 text-xs text-foreground/60">
+                <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
+                Afficher les archivés
+              </label>
             </div>
             <div className="divide-y divide-border">
               {loading ? <StateLine icon={<Loader2 className="h-4 w-4 animate-spin" />} text="Chargement fournisseurs" /> : null}
@@ -213,10 +237,10 @@ export function SuppliersClient() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{supplier.name}</p>
-                    <p className="truncate text-xs text-foreground/55">{supplier.categories.join(", ") || "Sans categorie"}</p>
+                    <p className="truncate text-xs text-foreground/55">{supplier.categories.join(", ") || "Sans catégorie"}</p>
                   </div>
                   <span className={cn("rounded-md px-2 py-1 text-xs", supplier.is_active ? "bg-foreground text-background" : "bg-muted text-foreground/55")}>
-                    {supplier.is_active ? "Actif" : "Archive"}
+                    {supplier.is_active ? "Actif" : "Archivé"}
                   </span>
                 </button>
               ))}
@@ -229,7 +253,7 @@ export function SuppliersClient() {
             <SupplierDetail supplier={selected} saving={saving} onEdit={startEdit} onArchive={archiveSelected} />
           ) : (
             <Card className="p-5">
-              <p className="text-sm text-foreground/55">Selectionnez ou creez un fournisseur.</p>
+              <p className="text-sm text-foreground/55">Sélectionnez ou créez un fournisseur.</p>
             </Card>
           )}
         </section>
@@ -246,7 +270,7 @@ function SupplierDetail({ supplier, saving, onEdit, onArchive }: { supplier: Sup
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-sm text-foreground/55">
               <Star className="h-4 w-4" />
-              Note {supplier.rating ?? "non renseignee"}
+              Note {supplier.rating ?? "non renseignée"}
             </p>
             <h2 className="mt-2 truncate text-3xl font-semibold">{supplier.name}</h2>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -267,10 +291,10 @@ function SupplierDetail({ supplier, saving, onEdit, onArchive }: { supplier: Sup
           </div>
         </div>
         <div className="mt-5 grid gap-2 sm:grid-cols-4">
-          <Metric label="Delai" value={`${supplier.lead_time_days} j`} />
+          <Metric label="Délai" value={`${supplier.lead_time_days} j`} />
           <Metric label="Minimum" value={`${supplier.minimum_order ?? 0} EUR`} />
           <Metric label="Factures" value={String(supplier.stats.invoice_count)} />
-          <Metric label="A revoir" value={String(supplier.stats.review_invoice_count)} />
+          <Metric label="À revoir" value={String(supplier.stats.review_invoice_count)} />
         </div>
       </Card>
 
@@ -278,17 +302,17 @@ function SupplierDetail({ supplier, saving, onEdit, onArchive }: { supplier: Sup
         <Card className="p-5">
           <h3 className="text-base font-semibold">Contact</h3>
           <div className="mt-4 space-y-3 text-sm">
-            <p className="font-medium">{supplier.contact_name ?? "Contact non renseigne"}</p>
+            <p className="font-medium">{supplier.contact_name ?? "Contact non renseigné"}</p>
             <p className="flex items-center gap-2 text-foreground/60"><Mail className="h-4 w-4" />{supplier.email ?? "Email absent"}</p>
-            <p className="flex items-center gap-2 text-foreground/60"><Phone className="h-4 w-4" />{supplier.phone ?? "Telephone absent"}</p>
+            <p className="flex items-center gap-2 text-foreground/60"><Phone className="h-4 w-4" />{supplier.phone ?? "Téléphone absent"}</p>
           </div>
         </Card>
         <Card className="p-5">
-          <h3 className="text-base font-semibold">Conditions achat</h3>
+          <h3 className="text-base font-semibold">Conditions d'achat</h3>
           <div className="mt-4 space-y-3 text-sm text-foreground/65">
-            <p>Paiement: {supplier.payment_terms ?? "Non renseigne"}</p>
+            <p>Paiement: {supplier.payment_terms ?? "Non renseigné"}</p>
             <p>Total achats HT: {Number(supplier.stats.purchase_total_excluding_tax || 0).toLocaleString("fr-FR")} EUR</p>
-            <p>Adresse: {supplier.address ?? "Non renseignee"}</p>
+            <p>Adresse: {supplier.address ?? "Non renseignée"}</p>
           </div>
         </Card>
       </div>
@@ -311,9 +335,9 @@ function SupplierEditor({ form, setForm, saving, onCancel, onSave }: { form: Sup
         <Input label="Nom" value={form.name} onChange={(value) => setField("name", value)} />
         <Input label="Contact" value={form.contact_name} onChange={(value) => setField("contact_name", value)} />
         <Input label="Email" value={form.email} type="email" onChange={(value) => setField("email", value)} />
-        <Input label="Telephone" value={form.phone} onChange={(value) => setField("phone", value)} />
-        <Input label="Categories" value={form.categories} onChange={(value) => setField("categories", value)} />
-        <Input label="Delai jours" value={form.lead_time_days} type="number" onChange={(value) => setField("lead_time_days", value)} />
+        <Input label="Téléphone" value={form.phone} onChange={(value) => setField("phone", value)} />
+        <Input label="Catégories" value={form.categories} onChange={(value) => setField("categories", value)} />
+        <Input label="Délai jours" value={form.lead_time_days} type="number" onChange={(value) => setField("lead_time_days", value)} />
         <Input label="Paiement" value={form.payment_terms} onChange={(value) => setField("payment_terms", value)} />
         <Input label="Minimum commande" value={form.minimum_order} type="number" onChange={(value) => setField("minimum_order", value)} />
         <Input label="Note" value={form.rating} type="number" onChange={(value) => setField("rating", value)} />

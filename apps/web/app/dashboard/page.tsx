@@ -9,30 +9,31 @@ import {
   Truck,
   type LucideIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { Topbar } from "@/components/shell/topbar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 const kpis = [
-  { label: "Marge estimee", value: "71.4%", delta: "+2.1%", icon: TrendingUp },
-  { label: "Factures a revoir", value: "12", delta: "OCR", icon: ScanLine },
+  { label: "Marge estimée", value: "71.4%", delta: "+2.1%", icon: TrendingUp },
+  { label: "Factures à revoir", value: "12", delta: "OCR", icon: ScanLine },
   { label: "Alertes stock", value: "8", delta: "Urgent", icon: AlertTriangle },
-  { label: "Conformite HACCP", value: "98%", delta: "Stable", icon: BadgeCheck },
+  { label: "Conformité HACCP", value: "98%", delta: "Stable", icon: BadgeCheck },
 ];
 
 const modules: Array<[string, string, string, LucideIcon]> = [
   ["OCR factures", "Extraction IA, validation et rapprochement fournisseur", "12 en revue", FileText],
-  ["Stocks intelligents", "Seuils, mouvements, inventaires et couts moyens", "8 alertes", Package],
+  ["Stocks intelligents", "Seuils, mouvements, inventaires et coûts moyens", "8 alertes", Package],
   ["Commandes", "Bons fournisseurs et sync caisse L'Addition", "4 brouillons", Truck],
-  ["Analytics", "Marge, pertes, previsions et historique complet", "+14% CA", TrendingUp],
+  ["Analyses", "Marge, pertes, prévisions et historique complet", "+14% CA", TrendingUp],
 ];
 
 const activity = [
-  "Facture Metro importee et pre-analysee",
-  "Releve froid positif conforme a 3.1 C",
+  "Facture Metro importée et pré-analysée",
+  "Relevé froid positif conforme à 3.1 C",
   "Stock saumon passe sous seuil critique",
-  "Fiche technique Paris-Brest mise a jour",
+  "Fiche technique Paris-Brest mise à jour",
 ];
 
 export default function DashboardPage() {
@@ -64,18 +65,20 @@ export default function DashboardPage() {
           <div className="rounded-lg border border-border bg-foreground p-5 text-background lg:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-sm text-background/60">Chez Therese et Denise</p>
+                <p className="text-sm text-background/60">Chez Thérèse et Denise</p>
                 <h2 className="mt-2 max-w-xl text-3xl font-semibold tracking-normal lg:text-5xl">
-                  Operations nettes, couts visibles, decisions rapides.
+                  Opérations nettes, coûts visibles, décisions rapides.
                 </h2>
               </div>
-              <Button variant="secondary" className="shrink-0 bg-background text-foreground hover:bg-background/90">
-                Ouvrir analytics
-                <ArrowUpRight className="h-4 w-4" />
+              <Button asChild variant="secondary" className="shrink-0 bg-background text-foreground hover:bg-background/90">
+                <Link href="/analytics">
+                  Ouvrir les analyses
+                  <ArrowUpRight className="h-4 w-4" />
+                </Link>
               </Button>
             </div>
             <div className="mt-8 grid gap-2 sm:grid-cols-3">
-              {["Food cost 28.6%", "Pertes 1.8%", "Prevision demain 146 couverts"].map((item) => (
+              {["Coût matière 28.6%", "Pertes 1.8%", "Prévision demain 146 couverts"].map((item) => (
                 <div key={item} className="rounded-md border border-background/15 px-3 py-3 text-sm text-background/80">
                   {item}
                 </div>
@@ -85,8 +88,8 @@ export default function DashboardPage() {
 
           <Card className="p-5">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-base font-semibold">Activite recente</h2>
-              <Button variant="ghost" size="sm">Voir</Button>
+              <h2 className="text-base font-semibold">Activité récente</h2>
+              <Button asChild variant="ghost" size="sm"><Link href="/history">Voir</Link></Button>
             </div>
             <div className="mt-4 space-y-3">
               {activity.map((item) => (

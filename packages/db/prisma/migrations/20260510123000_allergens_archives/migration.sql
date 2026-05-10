@@ -1,0 +1,10 @@
+ALTER TABLE "Supplier" ADD COLUMN "archivedAt" TIMESTAMP(3);
+
+ALTER TABLE "InventoryItem"
+ADD COLUMN "autoAllergens" TEXT[] DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN "isActive" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "archivedAt" TIMESTAMP(3);
+
+ALTER TABLE "Recipe" ADD COLUMN "archivedAt" TIMESTAMP(3);
+
+ALTER TABLE "SubRecipe" ADD COLUMN "archivedAt" TIMESTAMP(3);

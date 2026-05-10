@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.db.prisma import db
 from app.models.schemas import (
@@ -13,15 +13,19 @@ from app.models.schemas import (
 )
 from app.routers.deps import get_restaurant_context, require_roles
 from app.services.audit import write_audit_log
+from app.services.allergens import detect_allergens, merge_allergens
 from app.services.stock import create_stock_movement, ensure_supplier_belongs_to_restaurant
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
 @router.get("")
-async def list_items(ctx=Depends(get_restaurant_context)):
+async def list_items(include_archived: bool = Query(False), ctx=Depends(get_restaurant_context)):
+    where = {"restaurantId": ctx["restaurant_id"]}
+    if not include_archived:
+        where["isActive"] = True
     items = await db.inventoryitem.find_many(
-        where={"restaurantId": ctx["restaurant_id"]},
+        where=where,
         include={"supplier": True, "movements": True},
         order={"updatedAt": "desc"},
     )
@@ -31,7 +35,7 @@ async def list_items(ctx=Depends(get_restaurant_context)):
 @router.get("/alerts")
 async def stock_alerts(ctx=Depends(get_restaurant_context)):
     items = await db.inventoryitem.find_many(
-        where={"restaurantId": ctx["restaurant_id"]},
+        where={"restaurantId": ctx["restaurant_id"], "isActive": True},
         include={"supplier": True, "movements": True},
         order={"updatedAt": "desc"},
     )
@@ -40,7 +44,7 @@ async def stock_alerts(ctx=Depends(get_restaurant_context)):
 
 @router.get("/summary")
 async def stock_summary(ctx=Depends(get_restaurant_context)):
-    items = await db.inventoryitem.find_many(where={"restaurantId": ctx["restaurant_id"]})
+    items = await db.inventoryitem.find_many(where={"restaurantId": ctx["restaurant_id"], "isActive": True})
     total_value = sum((item.quantityOnHand * item.averageCost for item in items), Decimal("0"))
     alert_count = len([item for item in items if item.quantityOnHand <= item.reorderPoint])
     return {
@@ -54,6 +58,7 @@ async def stock_summary(ctx=Depends(get_restaurant_context)):
 @router.post("")
 async def create_item(payload: InventoryItemCreate, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF"))):
     await ensure_supplier_belongs_to_restaurant(payload.supplier_id, ctx["restaurant_id"])
+    auto_allergens = detect_allergens(payload.name, payload.category)
     item = await db.inventoryitem.create(
         data={
             "restaurantId": ctx["restaurant_id"],
@@ -66,7 +71,8 @@ async def create_item(payload: InventoryItemCreate, ctx=Depends(require_roles("O
             "quantityOnHand": payload.quantity_on_hand,
             "reorderPoint": payload.reorder_point,
             "averageCost": payload.average_cost,
-            "allergens": payload.allergens,
+            "allergens": merge_allergens(payload.allergens, auto_allergens),
+            "autoAllergens": auto_allergens,
         },
         include={"supplier": True, "movements": True},
     )
@@ -109,6 +115,13 @@ async def update_item(
         for key, value in payload.model_dump(exclude_unset=True).items()
         if value is not None or field_map[key] in nullable_fields
     }
+    if {"name", "category", "allergens"} & payload.model_fields_set:
+        next_name = payload.name if payload.name is not None else item.name
+        next_category = payload.category if payload.category is not None else item.category
+        auto_allergens = detect_allergens(next_name, next_category)
+        manual_allergens = payload.allergens if "allergens" in payload.model_fields_set else item.allergens
+        data["allergens"] = merge_allergens(manual_allergens, auto_allergens)
+        data["autoAllergens"] = auto_allergens
     updated = await db.inventoryitem.update(
         where={"id": item.id},
         data=data,
@@ -118,6 +131,26 @@ async def update_item(
         restaurant_id=ctx["restaurant_id"],
         user_id=ctx["user"].id,
         action="stock.item_updated",
+        entity="InventoryItem",
+        entity_id=item.id,
+    )
+    return _serialize_item(updated)
+
+
+@router.delete("/{item_id}")
+async def archive_item(item_id: str, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF"))):
+    item = await db.inventoryitem.find_first(where={"id": item_id, "restaurantId": ctx["restaurant_id"]})
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory item not found")
+    updated = await db.inventoryitem.update(
+        where={"id": item.id},
+        data={"isActive": False, "archivedAt": datetime.now(UTC)},
+        include={"supplier": True, "movements": True},
+    )
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action="stock.item_archived",
         entity="InventoryItem",
         entity_id=item.id,
     )
@@ -163,6 +196,9 @@ def _serialize_item(item):
         "average_cost": item.averageCost,
         "stock_value": value,
         "allergens": item.allergens,
+        "auto_allergens": item.autoAllergens,
+        "is_active": item.isActive,
+        "archived_at": item.archivedAt,
         "last_counted_at": item.lastCountedAt,
         "supplier_name": item.supplier.name if item.supplier else None,
         "is_below_reorder_point": item.quantityOnHand <= item.reorderPoint,
@@ -185,7 +221,7 @@ async def create_inventory_session(
     payload: InventorySessionCreate,
     ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF")),
 ):
-    item_filter = {"restaurantId": ctx["restaurant_id"]}
+    item_filter = {"restaurantId": ctx["restaurant_id"], "isActive": True}
     if payload.item_ids:
         item_filter["id"] = {"in": payload.item_ids}
     if payload.storage_area:
