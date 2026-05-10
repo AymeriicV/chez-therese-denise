@@ -443,7 +443,7 @@ export function InvoicesClient() {
   return (
     <AppShell>
       <Topbar />
-      <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-5 px-4 py-5 lg:px-8 lg:py-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 lg:px-8 lg:py-8">
         <section className="flex flex-col gap-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
