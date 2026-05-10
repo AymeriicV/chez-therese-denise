@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
+from prisma import Json
 
 from app.core.config import get_settings
 from app.db.prisma import db
@@ -141,14 +142,14 @@ async def process_invoice(invoice_id: str, ctx=Depends(require_roles("OWNER", "A
     updated = await db.supplierinvoice.update(
         where={"id": invoice.id},
         data={
-            "templateId": template.id,
+            "template": {"connect": {"id": template.id}},
             "number": extracted.number,
             "status": "OCR_REVIEW",
             "totalExcludingTax": extracted.total_excluding_tax,
             "totalIncludingTax": extracted.total_including_tax,
             "invoiceDate": extracted.invoice_date,
             "ocrConfidence": extracted.confidence,
-            "ocrPayload": extracted.raw_payload,
+            "ocrPayload": Json(extracted.raw_payload),
             "processedAt": datetime.now(UTC),
             "rejectedReason": None,
             "lines": {
@@ -297,11 +298,11 @@ async def _get_or_create_template(restaurant_id: str, supplier_id: str, supplier
         return template
     return await db.supplierinvoicetemplate.create(
         data={
-            "restaurantId": restaurant_id,
-            "supplierId": supplier_id,
+            "restaurant": {"connect": {"id": restaurant_id}},
+            "supplier": {"connect": {"id": supplier_id}},
             "name": f"Template OCR {supplier_name}",
-            "keywordHints": [supplier_name],
-            "lineHints": [],
+            "keywordHints": Json([supplier_name]),
+            "lineHints": Json([]),
             "notes": "Template initial cree automatiquement depuis une facture importee.",
         }
     )
@@ -320,8 +321,8 @@ async def _update_template_learning(template_id: str, lines) -> None:
     await db.supplierinvoicetemplate.update(
         where={"id": template.id},
         data={
-            "keywordHints": learned[:50],
-            "lineHints": [line.label for line in lines[:20]],
+            "keywordHints": Json(learned[:50]),
+            "lineHints": Json([line.label for line in lines[:20]]),
         },
     )
 

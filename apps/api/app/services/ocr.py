@@ -115,7 +115,7 @@ class InvoiceOcrService:
                 text = pytesseract.image_to_string(image, config="--psm 6")
         except Exception:
             return ""
-        return re.sub(r"\s+", " ", text).strip()
+        return InvoiceOcrService._normalize_text(text)
 
     @staticmethod
     def _extract_pdf_text(path: Path) -> str:
@@ -131,7 +131,7 @@ class InvoiceOcrService:
                 extracted = ""
             if extracted:
                 chunks.append(extracted)
-        return re.sub(r"\s+", " ", " ".join(chunks)).strip()
+        return InvoiceOcrService._normalize_text("\n".join(chunks))
 
     @staticmethod
     def _ocr_pdf(path: Path) -> str:
@@ -149,7 +149,7 @@ class InvoiceOcrService:
                     chunks.append(pytesseract.image_to_string(image, config="--psm 6"))
             except Exception:
                 continue
-        return re.sub(r"\s+", " ", " ".join(chunks)).strip()
+        return InvoiceOcrService._normalize_text("\n".join(chunks))
 
     @staticmethod
     def _extract_supplier(text: str) -> str | None:
@@ -179,24 +179,72 @@ class InvoiceOcrService:
 
     @classmethod
     def _extract_lines(cls, text: str, template_keywords: list[str] | None = None) -> list[ExtractedInvoiceLine]:
-        pattern = re.compile(
-            r"(?P<label>[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 '._/-]{2,}?)\s+"
-            r"(?P<qty>\d+(?:[,.]\d{1,3})?)\s*(?P<unit>kg|g|l|cl|piece|pcs|u|unite|unité|forfait)?\s+"
-            r"(?P<unit_price>\d+(?:[,.]\d{1,4})?)\s+"
-            r"(?P<total>\d+(?:[,.]\d{1,2})?)",
-            re.IGNORECASE,
-        )
         lines: list[ExtractedInvoiceLine] = []
-        for match in pattern.finditer(text):
+        seen_labels: set[str] = set()
+        table_started = False
+        for raw_line in text.splitlines():
+            line = re.sub(r"\s+", " ", raw_line).strip(" |:;")
+            lowered = line.lower()
+            if not table_started:
+                if ("article" in lowered and "designation" in lowered) or ("article" in lowered and "désignation" in lowered):
+                    table_started = True
+                continue
+            if any(token in lowered for token in ("soustotal", "sous-total", "montant ht", "montant ttc", "net a payer", "net à payer")):
+                break
+            if not cls._looks_like_line_candidate(line):
+                continue
+            strict = re.search(
+                r"(?P<label>[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 '._/-]{2,}?)\s+"
+                r"(?P<qty>\d+(?:[,.]\d{1,3})?)\s*(?P<unit>kg|g|l|cl|piece|pcs|u|unite|unité|forfait)?\s+"
+                r"(?P<unit_price>\d+(?:[,.]\d{1,4})?)\s+"
+                r"(?P<total>\d+(?:[,.]\d{1,2})?)",
+                line,
+                re.IGNORECASE,
+            )
+            if strict:
+                label = cls._sanitize_line_label(strict.group("label"))
+                if len(re.sub(r"[^A-Za-zÀ-ÿ]", "", label)) < 5:
+                    continue
+                key = label.lower()
+                if key in seen_labels:
+                    continue
+                seen_labels.add(key)
+                lines.append(
+                    ExtractedInvoiceLine(
+                        label=label,
+                        quantity=cls._to_decimal(strict.group("qty"), Decimal("1")),
+                        unit=(strict.group("unit") or "piece").lower(),
+                        unit_price=cls._to_decimal(strict.group("unit_price"), Decimal("0")),
+                        total=cls._to_decimal(strict.group("total"), Decimal("0")),
+                        tax_rate=Decimal("0"),
+                        confidence=Decimal("0.8000"),
+                    )
+                )
+                continue
+
+            amounts = list(re.finditer(r"\d+(?:[,.]\d{1,4})?", line))
+            if len(amounts) < 2:
+                continue
+            label = cls._sanitize_line_label(line[: amounts[-2].start()])
+            if not label or len(re.sub(r"[^A-Za-zÀ-ÿ]", "", label)) < 5:
+                continue
+            key = label.lower()
+            if key in seen_labels:
+                continue
+            seen_labels.add(key)
+            unit = cls._extract_unit(line)
+            quantity = cls._extract_quantity(line) if unit != "piece" else Decimal("1")
+            unit_price = cls._to_decimal(amounts[-2].group(), Decimal("0"))
+            total = cls._to_decimal(amounts[-1].group(), Decimal("0"))
             lines.append(
                 ExtractedInvoiceLine(
-                    label=match.group("label").strip()[:180],
-                    quantity=cls._to_decimal(match.group("qty"), Decimal("1")),
-                    unit=(match.group("unit") or "piece").lower(),
-                    unit_price=cls._to_decimal(match.group("unit_price"), Decimal("0")),
-                    total=cls._to_decimal(match.group("total"), Decimal("0")),
+                    label=label,
+                    quantity=quantity,
+                    unit=unit,
+                    unit_price=unit_price,
+                    total=total,
                     tax_rate=Decimal("0"),
-                    confidence=Decimal("0.7600"),
+                    confidence=Decimal("0.5600"),
                 )
             )
         if not lines and template_keywords:
@@ -240,6 +288,57 @@ class InvoiceOcrService:
     @staticmethod
     def _stable_suffix(value: str) -> str:
         return sha1(value.encode("utf-8")).hexdigest()[:4].upper()
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        lines = []
+        for raw_line in text.splitlines():
+            line = re.sub(r"[ \t]+", " ", raw_line).strip()
+            if line:
+                lines.append(line)
+        return "\n".join(lines)
+
+    @staticmethod
+    def _looks_like_line_candidate(line: str) -> bool:
+        if not line:
+            return False
+        lowered = line.lower()
+        if any(token in lowered for token in ("montant ht", "montant ttc", "soustotal", "sous-total", "tva", "net à payer", "net a payer", "facture", "adresse", "siret", "tournée", "page ")):
+            return False
+        return bool(re.search(r"[A-Za-zÀ-ÿ]{3,}", line) and re.search(r"\d", line))
+
+    @staticmethod
+    def _sanitize_line_label(value: str) -> str:
+        cleaned = re.sub(r"^[^A-Za-zÀ-ÿ0-9]+", "", value)
+        cleaned = re.sub(r"^\d+\s*[\]|:-]?\s*", "", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" -|:;")
+        tokens = [token for token in cleaned.split(" ") if token]
+        while tokens and len(re.sub(r"[^A-Za-zÀ-ÿ]", "", tokens[0])) < 3:
+            tokens.pop(0)
+        cleaned = " ".join(tokens)
+        replacements = {
+            "doeuf": "oeuf",
+            "oreue": "oeuf",
+            "oeufs": "oeuf",
+            "oeuf": "oeuf",
+        }
+        cleaned = " ".join(replacements.get(token.lower(), token) for token in cleaned.split())
+        return cleaned[:180]
+
+    @staticmethod
+    def _extract_unit(line: str) -> str:
+        lowered = line.lower()
+        for token in ("kg", "g", "l", "cl", "piece", "pcs", "u", "unité", "unite", "forfait"):
+            if re.search(rf"\b{re.escape(token)}\b", lowered):
+                return "piece" if token in {"piece", "pcs", "u", "forfait"} else token
+        return "piece"
+
+    @staticmethod
+    def _extract_quantity(line: str) -> Decimal:
+        match = re.search(r"\b(\d+(?:[,.]\d{1,3})?)\s*(kg|g|l|cl|piece|pcs|u|unité|unite)\b", line, re.IGNORECASE)
+        if match:
+            return InvoiceOcrService._to_decimal(match.group(1), Decimal("1"))
+        return Decimal("1")
 
     @staticmethod
     def _keywords_from_template(template: dict | None) -> list[str]:
