@@ -36,6 +36,7 @@ Pour reprendre apres interruption:
 - [x] 15 - Organisation Qualite / HACCP et recurrence journaliere reelle
 - [x] 16 - Production labo, tracabilite, DLC et etiquettes automatiques
 - [x] 17 - Equipe, planning et badgeuse avec roles et acces limites
+- [x] 18 - Archivage factures fournisseurs et OCR guide par fournisseur
 
 ## Modules cible
 
@@ -43,7 +44,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-Equipe, planning et badgeuse avec roles et acces limites.
+Archivage factures fournisseurs et OCR guide par fournisseur.
 
 ## Commandes etape 02
 
@@ -96,6 +97,34 @@ open http://localhost:3000/suppliers
 - `pnpm --version`: non execute, `pnpm` absent de l'environnement hote. Les conteneurs utilisent Corepack.
 - `tsc --version`: non execute, `tsc` absent de l'environnement hote.
 - `git push origin main`: OK apres etape 07.
+
+## Commandes etape 18
+
+```bash
+docker compose up --build -d api web
+python3 -m compileall -q apps/api
+docker compose exec -T api curl -s http://localhost:8000/health
+curl -I http://localhost:3000/invoices
+```
+
+## Etape 18 - Details
+
+- `/invoices` devient un vrai module d'archivage facture fournisseur avec upload obligatoire en selectionnant d'abord un fournisseur.
+- Les fichiers originaux photo/PDF sont stockes durablement dans le volume Docker `uploads` via `INVOICE_UPLOAD_DIR`.
+- Les factures gardent le nom original, le type MIME, la taille, le chemin serveur, l'URL securisee, l'utilisateur upload et le fournisseur lie.
+- Le detail facture affiche l'aperçu du document original, le telechargement, les statuts OCR et validation, ainsi que les filtres et tris de recherche.
+- L'OCR est guide par le fournisseur et peut s'appuyer sur `SupplierInvoiceTemplate` pour memoriser des mots-cles et affiner l'extraction par fournisseur.
+- Les lignes facture sont editables, peuvent etre reliees a des articles stock, et la validation cree les mouvements stock uniquement une fois.
+
+## Validation etape 18
+
+- `python3 -m compileall -q apps/api`: OK.
+- `docker compose exec -T web pnpm --filter @ctd/web build`: OK apres nettoyage de `.next`.
+- `curl -I http://localhost:3000/invoices`: HTTP 200.
+- `curl http://localhost:8000/health`: OK.
+- Login local `aymericvenacterpro@gmail.com / admin`: OK.
+- Upload facture teste via `/api/v1/invoices/upload` avec fournisseur selectionne: OK.
+- Fichier original persistant et telechargeable via `/api/v1/invoices/{id}/document`: OK, HTTP 200.
 
 ## GitHub
 

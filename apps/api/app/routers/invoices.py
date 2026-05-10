@@ -1,111 +1,147 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 
+from app.core.config import get_settings
 from app.db.prisma import db
-from app.models.schemas import InvoiceRejectRequest
+from app.models.schemas import InvoiceRejectRequest, InvoiceUpdateRequest
 from app.routers.deps import get_restaurant_context, require_roles
 from app.services.audit import write_audit_log
 from app.services.ocr import InvoiceOcrService
 from app.services.stock import apply_invoice_lines_to_stock
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
-UPLOAD_ROOT = Path("/app/uploads/invoices")
 ocr_service = InvoiceOcrService()
+MAX_UPLOAD_SIZE = 20 * 1024 * 1024
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
+ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "application/pdf"}
 
 
 @router.get("")
-async def list_invoices(ctx=Depends(get_restaurant_context)):
+async def list_invoices(
+    supplier_id: str | None = Query(None),
+    number: str | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    invoice_date_from: date | None = Query(None),
+    invoice_date_to: date | None = Query(None),
+    uploaded_from: date | None = Query(None),
+    uploaded_to: date | None = Query(None),
+    min_total: Decimal | None = Query(None),
+    max_total: Decimal | None = Query(None),
+    sort_by: str = Query("created_at"),
+    sort_dir: str = Query("desc"),
+    ctx=Depends(get_restaurant_context),
+):
     invoices = await db.supplierinvoice.find_many(
         where={"restaurantId": ctx["restaurant_id"]},
-        include={"supplier": True, "lines": True},
+        include={
+            "supplier": True,
+            "uploadedBy": True,
+            "template": True,
+            "lines": {"include": {"inventoryItem": True}},
+        },
         order={"createdAt": "desc"},
     )
-    return [_serialize_invoice(invoice) for invoice in invoices]
+    filtered = [
+        invoice
+        for invoice in invoices
+        if _matches_filters(
+            invoice,
+            supplier_id=supplier_id,
+            number=number,
+            status_filter=status_filter,
+            invoice_date_from=invoice_date_from,
+            invoice_date_to=invoice_date_to,
+            uploaded_from=uploaded_from,
+            uploaded_to=uploaded_to,
+            min_total=min_total,
+            max_total=max_total,
+        )
+    ]
+    reverse = sort_dir.lower() != "asc"
+    filtered.sort(key=lambda invoice: _sort_key(invoice, sort_by), reverse=reverse)
+    return [_serialize_invoice(invoice, ctx["restaurant_id"]) for invoice in filtered]
+
+
+@router.get("/{invoice_id}")
+async def get_invoice(invoice_id: str, ctx=Depends(get_restaurant_context)):
+    invoice = await _get_invoice(invoice_id, ctx["restaurant_id"])
+    return _serialize_invoice(invoice, ctx["restaurant_id"])
+
+
+@router.get("/{invoice_id}/document")
+async def get_invoice_document(invoice_id: str, ctx=Depends(get_restaurant_context)):
+    invoice = await _get_invoice(invoice_id, ctx["restaurant_id"])
+    path = Path(invoice.storagePath)
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    media_type = invoice.mimeType or "application/octet-stream"
+    return FileResponse(path, media_type=media_type, filename=invoice.originalName)
 
 
 @router.post("/upload")
-async def upload_invoice(file: UploadFile = File(...), ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF", "ACCOUNTANT"))):
-    UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
-    suffix = Path(file.filename or "invoice.pdf").suffix
-    storage_name = f"{uuid4()}{suffix}"
-    storage_path = UPLOAD_ROOT / storage_name
-    content = await file.read()
-    storage_path.write_bytes(content)
+async def upload_invoice(
+    supplier_id: str = Form(...),
+    file: UploadFile = File(...),
+    ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF", "ACCOUNTANT")),
+):
+    await _ensure_supplier(supplier_id, ctx["restaurant_id"])
+    validated_upload = await _store_upload(file, ctx["restaurant_id"])
     invoice = await db.supplierinvoice.create(
         data={
             "restaurantId": ctx["restaurant_id"],
-            "originalName": file.filename or storage_name,
-            "storagePath": str(storage_path),
-            "mimeType": file.content_type,
-            "fileSize": len(content),
-            "status": "OCR_PROCESSING",
-        }
+            "supplierId": supplier_id,
+            "uploadedByUserId": ctx["user"].id,
+            "originalName": validated_upload["original_name"],
+            "storedName": validated_upload["stored_name"],
+            "storagePath": validated_upload["storage_path"],
+            "mimeType": validated_upload["mime_type"],
+            "fileSize": validated_upload["file_size"],
+            "status": "UPLOADED",
+        },
+        include={
+            "supplier": True,
+            "uploadedBy": True,
+            "template": True,
+            "lines": {"include": {"inventoryItem": True}},
+        },
     )
-    await write_audit_log(
-        restaurant_id=ctx["restaurant_id"],
-        user_id=ctx["user"].id,
-        action="invoice.uploaded",
-        entity="SupplierInvoice",
-        entity_id=invoice.id,
-        metadata={"filename": file.filename, "size": len(content)},
+    await _audit(
+        ctx,
+        "invoice.uploaded",
+        invoice.id,
+        {"filename": validated_upload["original_name"], "size": validated_upload["file_size"], "supplierId": supplier_id},
     )
-    return await _process_invoice(invoice.id, ctx)
+    return _serialize_invoice(invoice, ctx["restaurant_id"])
 
 
 @router.post("/{invoice_id}/process")
 async def process_invoice(invoice_id: str, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF", "ACCOUNTANT"))):
     invoice = await _get_invoice(invoice_id, ctx["restaurant_id"])
     if invoice.status == "APPROVED":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Approved invoice cannot be reprocessed")
-    return await _process_invoice(invoice_id, ctx)
-
-
-@router.post("/{invoice_id}/approve")
-async def approve_invoice(invoice_id: str, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "ACCOUNTANT"))):
-    invoice = await _get_invoice(invoice_id, ctx["restaurant_id"])
-    if invoice.status == "APPROVED":
-        return _serialize_invoice(invoice)
-    applied_lines = await apply_invoice_lines_to_stock(invoice, ctx["restaurant_id"])
-    updated = await db.supplierinvoice.update(
-        where={"id": invoice.id},
-        data={"status": "APPROVED", "approvedAt": datetime.now(UTC), "rejectedReason": None},
-        include={"supplier": True, "lines": True},
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Une facture validée ne peut pas être relancée")
+    if invoice.status == "REJECTED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Une facture rejetée doit être réimportée")
+    if not invoice.supplierId:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sélectionnez d'abord un fournisseur")
+    supplier = await _ensure_supplier(invoice.supplierId, ctx["restaurant_id"])
+    template = await _get_or_create_template(ctx["restaurant_id"], supplier.id, supplier.name)
+    extracted = await ocr_service.extract(
+        Path(invoice.storagePath),
+        invoice.originalName,
+        supplier_name=supplier.name,
+        template=_template_payload(template),
     )
-    await _audit(ctx, "invoice.approved", invoice.id, {"stockLinesApplied": applied_lines})
-    return _serialize_invoice(updated)
-
-
-@router.post("/{invoice_id}/reject")
-async def reject_invoice(
-    invoice_id: str,
-    payload: InvoiceRejectRequest,
-    ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "ACCOUNTANT")),
-):
-    invoice = await _get_invoice(invoice_id, ctx["restaurant_id"])
-    if invoice.status == "APPROVED":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Approved invoice cannot be rejected")
-    updated = await db.supplierinvoice.update(
-        where={"id": invoice.id},
-        data={"status": "REJECTED", "rejectedReason": payload.reason},
-        include={"supplier": True, "lines": True},
-    )
-    await _audit(ctx, "invoice.rejected", invoice.id, {"reason": payload.reason})
-    return _serialize_invoice(updated)
-
-
-async def _process_invoice(invoice_id: str, ctx: dict):
-    invoice = await _get_invoice(invoice_id, ctx["restaurant_id"])
-    extracted = await ocr_service.extract(Path(invoice.storagePath), invoice.originalName)
-    supplier = await _find_or_create_supplier(ctx["restaurant_id"], extracted.supplier_name)
-
+    linked_lines = await _match_invoice_lines(ctx["restaurant_id"], extracted.lines)
     await db.supplierinvoiceline.delete_many(where={"invoiceId": invoice.id})
     updated = await db.supplierinvoice.update(
         where={"id": invoice.id},
         data={
-            "supplierId": supplier.id,
+            "templateId": template.id,
             "number": extracted.number,
             "status": "OCR_REVIEW",
             "totalExcludingTax": extracted.total_excluding_tax,
@@ -125,33 +161,337 @@ async def _process_invoice(invoice_id: str, ctx: dict):
                         "total": line.total,
                         "taxRate": line.tax_rate,
                         "confidence": line.confidence,
+                        "inventoryItemId": linked_lines.get(line.label.lower()),
                     }
                     for line in extracted.lines
                 ]
             },
         },
-        include={"supplier": True, "lines": True},
+        include={
+            "supplier": True,
+            "uploadedBy": True,
+            "template": True,
+            "lines": {"include": {"inventoryItem": True}},
+        },
     )
-    await _audit(ctx, "invoice.ocr_processed", invoice.id, {"confidence": str(extracted.confidence)})
-    return _serialize_invoice(updated)
+    await _update_template_learning(template.id, extracted.lines)
+    await _audit(ctx, "invoice.ocr_processed", invoice.id, {"confidence": str(extracted.confidence), "templateId": template.id})
+    return _serialize_invoice(updated, ctx["restaurant_id"])
+
+
+@router.patch("/{invoice_id}")
+async def update_invoice(invoice_id: str, payload: InvoiceUpdateRequest, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "ACCOUNTANT"))):
+    invoice = await _get_invoice(invoice_id, ctx["restaurant_id"])
+    if invoice.status == "APPROVED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Une facture validée ne peut pas être modifiée")
+    data = {}
+    if "supplier_id" in payload.model_fields_set:
+        if payload.supplier_id:
+            await _ensure_supplier(payload.supplier_id, ctx["restaurant_id"])
+            data["supplierId"] = payload.supplier_id
+        else:
+            data["supplierId"] = None
+    if "number" in payload.model_fields_set:
+        data["number"] = payload.number
+    if "invoice_date" in payload.model_fields_set:
+        data["invoiceDate"] = payload.invoice_date
+    if "total_excluding_tax" in payload.model_fields_set:
+        data["totalExcludingTax"] = payload.total_excluding_tax
+    if "total_including_tax" in payload.model_fields_set:
+        data["totalIncludingTax"] = payload.total_including_tax
+    if "status" in payload.model_fields_set and payload.status:
+        data["status"] = payload.status
+    if data:
+        await db.supplierinvoice.update(where={"id": invoice.id}, data=data)
+    if "lines" in payload.model_fields_set and payload.lines is not None:
+        await db.supplierinvoiceline.delete_many(where={"invoiceId": invoice.id})
+        for line in payload.lines:
+            await db.supplierinvoiceline.create(
+                data={
+                    "invoiceId": invoice.id,
+                    "inventoryItemId": line.inventory_item_id,
+                    "label": line.label,
+                    "quantity": line.quantity,
+                    "unit": line.unit,
+                    "unitPrice": line.unit_price,
+                    "total": line.total,
+                },
+            )
+    refreshed = await _get_invoice(invoice_id, ctx["restaurant_id"])
+    await _audit(ctx, "invoice.updated", invoice.id, {"fields": list(payload.model_fields_set)})
+    return _serialize_invoice(refreshed, ctx["restaurant_id"])
+
+
+@router.post("/{invoice_id}/approve")
+async def approve_invoice(invoice_id: str, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "ACCOUNTANT"))):
+    invoice = await _get_invoice(invoice_id, ctx["restaurant_id"])
+    if invoice.status == "APPROVED":
+        return _serialize_invoice(invoice, ctx["restaurant_id"])
+    if invoice.status != "OCR_REVIEW":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La facture doit être analysée avant validation")
+    applied_lines = await apply_invoice_lines_to_stock(invoice, ctx["restaurant_id"])
+    updated = await db.supplierinvoice.update(
+        where={"id": invoice.id},
+        data={"status": "APPROVED", "approvedAt": datetime.now(UTC), "rejectedReason": None},
+        include={
+            "supplier": True,
+            "uploadedBy": True,
+            "template": True,
+            "lines": {"include": {"inventoryItem": True}},
+        },
+    )
+    await _audit(ctx, "invoice.approved", invoice.id, {"stockLinesApplied": applied_lines})
+    return _serialize_invoice(updated, ctx["restaurant_id"])
+
+
+@router.post("/{invoice_id}/reject")
+async def reject_invoice(
+    invoice_id: str,
+    payload: InvoiceRejectRequest,
+    ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "ACCOUNTANT")),
+):
+    invoice = await _get_invoice(invoice_id, ctx["restaurant_id"])
+    if invoice.status == "APPROVED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Une facture validée ne peut pas être rejetée")
+    updated = await db.supplierinvoice.update(
+        where={"id": invoice.id},
+        data={"status": "REJECTED", "rejectedReason": payload.reason},
+        include={
+            "supplier": True,
+            "uploadedBy": True,
+            "template": True,
+            "lines": {"include": {"inventoryItem": True}},
+        },
+    )
+    await _audit(ctx, "invoice.rejected", invoice.id, {"reason": payload.reason})
+    return _serialize_invoice(updated, ctx["restaurant_id"])
 
 
 async def _get_invoice(invoice_id: str, restaurant_id: str):
     invoice = await db.supplierinvoice.find_first(
         where={"id": invoice_id, "restaurantId": restaurant_id},
-        include={"supplier": True, "lines": True},
+        include={
+            "supplier": True,
+            "uploadedBy": True,
+            "template": True,
+            "lines": {"include": {"inventoryItem": True}},
+        },
     )
     if not invoice:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Facture introuvable")
     return invoice
 
 
-async def _find_or_create_supplier(restaurant_id: str, name: str):
-    supplier_name = name.strip() or "Fournisseur inconnu"
-    supplier = await db.supplier.find_first(where={"restaurantId": restaurant_id, "name": supplier_name})
-    if supplier:
-        return supplier
-    return await db.supplier.create(data={"restaurantId": restaurant_id, "name": supplier_name})
+async def _ensure_supplier(supplier_id: str, restaurant_id: str):
+    supplier = await db.supplier.find_first(where={"id": supplier_id, "restaurantId": restaurant_id})
+    if not supplier:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Fournisseur introuvable")
+    return supplier
+
+
+async def _get_or_create_template(restaurant_id: str, supplier_id: str, supplier_name: str):
+    template = await db.supplierinvoicetemplate.find_first(
+        where={"restaurantId": restaurant_id, "supplierId": supplier_id, "isActive": True},
+    )
+    if template:
+        return template
+    return await db.supplierinvoicetemplate.create(
+        data={
+            "restaurantId": restaurant_id,
+            "supplierId": supplier_id,
+            "name": f"Template OCR {supplier_name}",
+            "keywordHints": [supplier_name],
+            "lineHints": [],
+            "notes": "Template initial cree automatiquement depuis une facture importee.",
+        }
+    )
+
+
+async def _update_template_learning(template_id: str, lines) -> None:
+    template = await db.supplierinvoicetemplate.find_first(where={"id": template_id})
+    if not template:
+        return
+    existing = _normalize_keywords(template.keywordHints)
+    learned = existing[:]
+    for line in lines:
+        for token in _normalize_keywords([line.label]):
+            if token not in learned:
+                learned.append(token)
+    await db.supplierinvoicetemplate.update(
+        where={"id": template.id},
+        data={
+            "keywordHints": learned[:50],
+            "lineHints": [line.label for line in lines[:20]],
+        },
+    )
+
+
+async def _match_invoice_lines(restaurant_id: str, lines) -> dict[str, str]:
+    items = await db.inventoryitem.find_many(where={"restaurantId": restaurant_id, "isActive": True})
+    normalized = {item.name.lower(): item.id for item in items}
+    result: dict[str, str] = {}
+    for line in lines:
+        line_key = line.label.lower()
+        if line_key in normalized:
+            result[line_key] = normalized[line_key]
+            continue
+        for item in items:
+            if item.name.lower() in line_key or line_key in item.name.lower():
+                result[line_key] = item.id
+                break
+    return result
+
+
+async def _store_upload(file: UploadFile, restaurant_id: str):
+    settings = get_settings()
+    original_name = file.filename or "facture.pdf"
+    suffix = Path(original_name).suffix.lower()
+    mime_type = (file.content_type or "").lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Format non supporte. Utilisez jpg, jpeg, png ou pdf.")
+    if mime_type and mime_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Type de fichier non supporte.")
+    content = await file.read()
+    if len(content) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Le fichier est vide.")
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Le fichier depasse la limite autorisee de 20 Mo.")
+    root = Path(settings.invoice_upload_dir)
+    target_dir = root / restaurant_id / datetime.now(UTC).strftime("%Y/%m")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    storage_name = f"{uuid4()}{suffix}"
+    storage_path = target_dir / storage_name
+    storage_path.write_bytes(content)
+    return {
+        "original_name": original_name,
+        "stored_name": storage_name,
+        "storage_path": str(storage_path),
+        "mime_type": mime_type or _mime_from_suffix(suffix),
+        "file_size": len(content),
+    }
+
+
+def _mime_from_suffix(suffix: str) -> str:
+    return {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".pdf": "application/pdf",
+    }.get(suffix, "application/octet-stream")
+
+
+def _serialize_invoice(invoice, restaurant_id: str):
+    uploaded_by_name = None
+    if getattr(invoice, "uploadedBy", None):
+        uploaded_by_name = f"{invoice.uploadedBy.firstName} {invoice.uploadedBy.lastName}".strip()
+    return {
+        "id": invoice.id,
+        "original_name": invoice.originalName,
+        "stored_name": invoice.storedName,
+        "status": invoice.status,
+        "supplier_id": invoice.supplierId,
+        "supplier_name": invoice.supplier.name if invoice.supplier else None,
+        "uploaded_by_name": uploaded_by_name,
+        "number": invoice.number,
+        "total_excluding_tax": invoice.totalExcludingTax,
+        "total_including_tax": invoice.totalIncludingTax,
+        "invoice_date": invoice.invoiceDate,
+        "ocr_confidence": invoice.ocrConfidence,
+        "processed_at": invoice.processedAt,
+        "approved_at": invoice.approvedAt,
+        "rejected_reason": invoice.rejectedReason,
+        "mime_type": invoice.mimeType,
+        "file_size": invoice.fileSize,
+        "storage_path": invoice.storagePath,
+        "uploaded_at": invoice.createdAt,
+        "document_url": f"/api/v1/invoices/{invoice.id}/document",
+        "can_reprocess": invoice.status != "APPROVED",
+        "can_approve": invoice.status == "OCR_REVIEW",
+        "template": _template_payload(invoice.template) if getattr(invoice, "template", None) else None,
+        "lines": [
+            {
+                "id": line.id,
+                "label": line.label,
+                "quantity": line.quantity,
+                "unit": line.unit,
+                "unit_price": line.unitPrice,
+                "total": line.total,
+                "tax_rate": line.taxRate,
+                "confidence": line.confidence,
+                "inventory_item_id": line.inventoryItemId,
+                "inventory_item_name": line.inventoryItem.name if getattr(line, "inventoryItem", None) else None,
+            }
+            for line in invoice.lines
+        ],
+    }
+
+
+def _template_payload(template):
+    if not template:
+        return None
+    return {
+        "id": template.id,
+        "name": template.name,
+        "keywordHints": template.keywordHints or [],
+        "lineHints": template.lineHints or [],
+        "notes": template.notes,
+        "isActive": template.isActive,
+    }
+
+
+def _normalize_keywords(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return [str(value).strip()]
+
+
+def _sort_key(invoice, sort_by: str):
+    if sort_by == "supplier":
+        return (invoice.supplier.name if invoice.supplier else "", invoice.createdAt)
+    if sort_by == "amount":
+        return invoice.totalIncludingTax or invoice.totalExcludingTax or Decimal("0")
+    if sort_by == "status":
+        return invoice.status
+    return invoice.createdAt
+
+
+def _matches_filters(
+    invoice,
+    *,
+    supplier_id: str | None,
+    number: str | None,
+    status_filter: str | None,
+    invoice_date_from: date | None,
+    invoice_date_to: date | None,
+    uploaded_from: date | None,
+    uploaded_to: date | None,
+    min_total: Decimal | None,
+    max_total: Decimal | None,
+):
+    if supplier_id and invoice.supplierId != supplier_id:
+        return False
+    if number and number.lower() not in (invoice.number or "").lower() and number.lower() not in invoice.originalName.lower():
+        return False
+    if status_filter and invoice.status != status_filter:
+        return False
+    if invoice_date_from and (not invoice.invoiceDate or invoice.invoiceDate.date() < invoice_date_from):
+        return False
+    if invoice_date_to and (not invoice.invoiceDate or invoice.invoiceDate.date() > invoice_date_to):
+        return False
+    if uploaded_from and invoice.createdAt.date() < uploaded_from:
+        return False
+    if uploaded_to and invoice.createdAt.date() > uploaded_to:
+        return False
+    total = invoice.totalIncludingTax or invoice.totalExcludingTax
+    if min_total is not None and total is not None and total < min_total:
+        return False
+    if max_total is not None and total is not None and total > max_total:
+        return False
+    return True
 
 
 async def _audit(ctx: dict, action: str, invoice_id: str, metadata: dict | None = None) -> None:
@@ -163,33 +503,3 @@ async def _audit(ctx: dict, action: str, invoice_id: str, metadata: dict | None 
         entity_id=invoice_id,
         metadata=metadata,
     )
-
-
-def _serialize_invoice(invoice):
-    return {
-        "id": invoice.id,
-        "original_name": invoice.originalName,
-        "status": invoice.status,
-        "supplier_name": invoice.supplier.name if invoice.supplier else None,
-        "number": invoice.number,
-        "total_excluding_tax": invoice.totalExcludingTax,
-        "total_including_tax": invoice.totalIncludingTax,
-        "invoice_date": invoice.invoiceDate,
-        "ocr_confidence": invoice.ocrConfidence,
-        "processed_at": invoice.processedAt,
-        "approved_at": invoice.approvedAt,
-        "rejected_reason": invoice.rejectedReason,
-        "lines": [
-            {
-                "id": line.id,
-                "label": line.label,
-                "quantity": line.quantity,
-                "unit": line.unit,
-                "unit_price": line.unitPrice,
-                "total": line.total,
-                "tax_rate": line.taxRate,
-                "confidence": line.confidence,
-            }
-            for line in invoice.lines
-        ],
-    }

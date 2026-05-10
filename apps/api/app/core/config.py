@@ -44,6 +44,11 @@ class Settings(BaseSettings):
         alias="SEED_ADMIN_PASSWORD",
     )
 
+    invoice_upload_dir: str = Field(
+        default="/app/uploads/invoices",
+        alias="INVOICE_UPLOAD_DIR",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

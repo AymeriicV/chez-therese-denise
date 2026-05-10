@@ -381,13 +381,17 @@ class InvoiceLineOut(BaseModel):
     total: Decimal
     tax_rate: Decimal | None = None
     confidence: Decimal | None = None
+    inventory_item_id: str | None = None
 
 
 class InvoiceOut(BaseModel):
     id: str
     original_name: str
+    stored_name: str | None = None
     status: str
+    supplier_id: str | None = None
     supplier_name: str | None = None
+    uploaded_by_name: str | None = None
     number: str | None = None
     total_excluding_tax: Decimal | None = None
     total_including_tax: Decimal | None = None
@@ -396,7 +400,38 @@ class InvoiceOut(BaseModel):
     processed_at: datetime | None = None
     approved_at: datetime | None = None
     rejected_reason: str | None = None
+    mime_type: str | None = None
+    file_size: int | None = None
+    storage_path: str
+    uploaded_at: datetime
+    document_url: str | None = None
+    can_reprocess: bool = True
+    can_approve: bool = True
     lines: list[InvoiceLineOut] = Field(default_factory=list)
+
+
+class InvoiceUploadRequest(BaseModel):
+    supplier_id: str
+
+
+class InvoiceLineUpdate(BaseModel):
+    id: str | None = None
+    label: str = Field(min_length=1, max_length=180)
+    quantity: Decimal = Field(gt=0)
+    unit: str = Field(min_length=1, max_length=32)
+    unit_price: Decimal = Field(ge=0)
+    total: Decimal = Field(ge=0)
+    inventory_item_id: str | None = None
+
+
+class InvoiceUpdateRequest(BaseModel):
+    supplier_id: str | None = None
+    number: str | None = None
+    invoice_date: datetime | None = None
+    total_excluding_tax: Decimal | None = None
+    total_including_tax: Decimal | None = None
+    status: Literal["UPLOADED", "OCR_PROCESSING", "OCR_REVIEW", "APPROVED", "REJECTED"] | None = None
+    lines: list[InvoiceLineUpdate] | None = None
 
 
 class InvoiceRejectRequest(BaseModel):

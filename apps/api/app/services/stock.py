@@ -47,7 +47,13 @@ async def apply_invoice_lines_to_stock(invoice, restaurant_id: str) -> int:
     for line in invoice.lines:
         if line.quantity <= 0:
             continue
-        item = await db.inventoryitem.find_first(where={"restaurantId": restaurant_id, "name": line.label})
+        item = None
+        if getattr(line, "inventoryItemId", None):
+            item = await db.inventoryitem.find_first(
+                where={"id": line.inventoryItemId, "restaurantId": restaurant_id}
+            )
+        if not item:
+            item = await db.inventoryitem.find_first(where={"restaurantId": restaurant_id, "name": line.label})
         unit_cost = line.unitPrice
         if not item:
             item = await db.inventoryitem.create(

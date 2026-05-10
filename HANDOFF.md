@@ -45,6 +45,7 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Module `/time-clock` livre: pointage serveur entree/sortie pour employe, historique personnel, vue equipe pour OWNER, corrections auditables avec justification obligatoire.
 - Sidebar role-aware: l'EMPLOYEE voit seulement `Mon planning`, `Badgeuse` et `Quitter`; les modules admin sont masques et l'app redirige vers `/planning` si besoin.
 - Auth frontend: le role est decode depuis le JWT, `Authorization` et `X-Restaurant-Id` restent centralises dans `apiRequest`.
+- Module `/invoices` durci: import obligatoire apres selection du fournisseur, stockage durable du fichier original dans le volume `uploads`, preview/telchargement securises, filtres et tri, OCR guide par fournisseur, templates fournisseurs, edition des lignes, liaison stock et validation idempotente.
 
 ## Validation realisee
 
@@ -55,7 +56,10 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - `docker compose up --build -d`: OK.
 - `curl http://localhost:8000/health`: OK.
 - `curl -I http://localhost:3000/dashboard`: HTTP 200.
+- `curl -I http://localhost:3000/invoices`: HTTP 200.
 - Login `aymericvenacterpro@gmail.com / admin`: OK.
+- Upload facture de test via `/api/v1/invoices/upload` avec fournisseur selectionne: OK.
+- Telechargement du document original via `/api/v1/invoices/{id}/document`: OK, HTTP 200.
 - Creation employe de test: OK.
 - Login employe de test: OK.
 - Planning employe filtre sur son planning uniquement: OK.
@@ -68,6 +72,8 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - API qualite recurrente testee: planning temperatures du dimanche 10 mai 2026, taches HACCP du 10 mai et du 11 mai distinctes, `Sol` reste `DONE` au refresh du 10 mai et revient `TODO` le 11 mai.
 - API production testee: ingredient `Lieu noir` ajoute a la fiche `Cote de boeuf`, production de `4` portions creee, stock `Lieu noir` de `11 kg` a `9 kg`, DLC auto au `13/05/2026 18:54`, etiquette auto et trace HACCP `Production labo`.
 - Pages `team`, `planning` et `time-clock` repondent `200` depuis le container Next avec fetch manuel.
+- Pages `invoices`, `team`, `planning` et `time-clock` repondent `200` depuis le container Next avec fetch manuel.
+- Les routes `/api/v1/invoices/upload` et `/api/v1/invoices/{id}/document` fonctionnent avec token local et fournisseur selectionne.
 
 ## Derniere correction
 
@@ -75,6 +81,8 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Planning: vue hebdomadaire remplacee par une grille type Excel, avec colonnes Employe / Lundi / Mardi / Mercredi / Jeudi / Vendredi / Samedi / Dimanche / Total semaine / Objectif.
 - Planning: le service API a ete reconstruit apres regeneration Prisma pour exposer `PlanningSchedule` et `PlanningScheduleDay` sans 500.
 - Planning: `GET /planning` renvoie maintenant les lignes du restaurant de test, et `team`, `planning`, `time-clock` repondent 200 depuis Next.
+- Factures: `GET /invoices` expose maintenant les metadonnees fichier, le document original securise, les filtres/recherches, la correction manuelle des lignes et la validation avec creation des mouvements stock uniquement apres approbation.
+- Factures: l'upload impose le fournisseur, le fichier original est persistant dans `uploads`, et le document reste consultable apres rebuild Docker.
 
 ## Prochaine reprise
 

@@ -66,6 +66,7 @@ model User {
   timeClockLogs  TimeClockLog[]
   timeClockCorrectionsMade TimeClockCorrectionLog[] @relation("TimeClockCorrectionByUser")
   timeClockCorrectionsFor  TimeClockCorrectionLog[] @relation("TimeClockCorrectionEmployee")
+  uploadedSupplierInvoices  SupplierInvoice[] @relation("SupplierInvoiceUploadedBy")
 }
 
 model Restaurant {
@@ -81,6 +82,7 @@ model Restaurant {
   suppliers           Supplier[]
   purchaseOrders      PurchaseOrder[]
   invoices            SupplierInvoice[]
+  invoiceTemplates    SupplierInvoiceTemplate[]
   inventoryItems      InventoryItem[]
   inventorySessions   InventoryCountSession[]
   recipes             Recipe[]
@@ -132,6 +134,7 @@ model Supplier {
   restaurant   Restaurant        @relation(fields: [restaurantId], references: [id])
   purchaseOrders PurchaseOrder[]
   invoices     SupplierInvoice[]
+  invoiceTemplates SupplierInvoiceTemplate[]
   inventoryItems InventoryItem[]
 }
 
@@ -139,9 +142,12 @@ model SupplierInvoice {
   id             String        @id @default(uuid())
   restaurantId   String
   supplierId     String?
+  uploadedByUserId String?
+  templateId     String?
   number         String?
   status         InvoiceStatus @default(UPLOADED)
   originalName   String
+  storedName     String?
   storagePath    String
   mimeType       String?
   fileSize       Int?
@@ -157,12 +163,15 @@ model SupplierInvoice {
   updatedAt      DateTime      @updatedAt
   restaurant     Restaurant    @relation(fields: [restaurantId], references: [id])
   supplier       Supplier?     @relation(fields: [supplierId], references: [id])
+  uploadedBy    User?         @relation("SupplierInvoiceUploadedBy", fields: [uploadedByUserId], references: [id])
+  template     SupplierInvoiceTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   lines          SupplierInvoiceLine[]
 }
 
 model SupplierInvoiceLine {
   id          String          @id @default(uuid())
   invoiceId   String
+  inventoryItemId String?
   label       String
   quantity    Decimal         @default(1) @db.Decimal(12, 3)
   unit        String           @default("piece")
@@ -172,6 +181,26 @@ model SupplierInvoiceLine {
   confidence  Decimal?        @db.Decimal(5, 4)
   createdAt   DateTime        @default(now())
   invoice     SupplierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+}
+
+model SupplierInvoiceTemplate {
+  id              String     @id @default(uuid())
+  restaurantId    String
+  supplierId      String?
+  name            String?
+  numberPattern   String?
+  keywordHints    Json?
+  lineHints       Json?
+  notes           String?
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id])
+  supplier        Supplier?   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  invoices        SupplierInvoice[]
+
+  @@index([restaurantId, supplierId])
 }
 
 model InventoryItem {
@@ -197,6 +226,7 @@ model InventoryItem {
   supplier       Supplier?       @relation(fields: [supplierId], references: [id])
   movements      StockMovement[]
   countLines     InventoryCountLine[]
+  invoiceLines   SupplierInvoiceLine[]
   recipeIngredients RecipeIngredient[]
   subRecipeIngredients SubRecipeIngredient[]
   productionConsumptions ProductionConsumption[]

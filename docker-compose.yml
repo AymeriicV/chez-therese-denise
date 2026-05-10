@@ -25,6 +25,8 @@ services:
     container_name: ctd-api
     restart: unless-stopped
     env_file: .env
+    environment:
+      INVOICE_UPLOAD_DIR: /app/uploads/invoices
     ports:
       - "8000:8000"
     volumes:

@@ -70,6 +70,16 @@ type ApiOptions = RequestInit & {
   skipJson?: boolean;
 };
 
+function buildApiHeaders(options: ApiOptions, token: string | null, restaurantId: string | null) {
+  const headers = new Headers(options.headers);
+  if (!(options.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (restaurantId) headers.set("X-Restaurant-Id", restaurantId);
+  return headers;
+}
+
 export function getStoredToken() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem("ctd_token");
@@ -128,12 +138,7 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
     throw new ApiError("Authentification requise", 401);
   }
   const restaurantId = getStoredRestaurantId();
-  const headers = new Headers(options.headers);
-  if (!(options.body instanceof FormData)) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  if (restaurantId) headers.set("X-Restaurant-Id", restaurantId);
+  const headers = buildApiHeaders(options, token, restaurantId);
 
   let response: Response;
   try {
@@ -170,6 +175,55 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
   }
   if (options.skipJson || response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+export async function apiFetch(path: string, options: ApiOptions = {}) {
+  const authRequired = options.authRequired ?? !path.startsWith("/auth/");
+  const token = getStoredToken();
+  if (authRequired && !token) {
+    clearStoredSession();
+    redirectToLogin();
+    throw new ApiError("Authentification requise", 401);
+  }
+  const restaurantId = getStoredRestaurantId();
+  const headers = buildApiHeaders(options, token, restaurantId);
+  try {
+    return await fetch(`${getApiUrl()}/api/v1${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    throw new ApiError(
+      error instanceof Error && error.message !== "Failed to fetch"
+        ? error.message
+        : "Connexion API impossible. Vérifiez le réseau ou réessayez.",
+      0,
+    );
+  }
+}
+
+export async function apiBlob(path: string, options: ApiOptions = {}) {
+  const response = await apiFetch(path, options);
+  if (response.status === 401) {
+    clearStoredSession();
+    redirectToLogin();
+  }
+  if (!response.ok) {
+    let message = `Erreur API ${response.status}`;
+    try {
+      const payload = await response.json();
+      message =
+        response.status === 422
+          ? friendlyValidationMessage(payload, message)
+          : typeof payload.detail === "string"
+            ? payload.detail
+            : message;
+    } catch {
+      message = response.statusText || message;
+    }
+    throw new ApiError(message, response.status);
+  }
+  return response.blob();
 }
 
 export function authHint() {
