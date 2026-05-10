@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from app.db.prisma import db
 from app.models.schemas import InvoiceRejectRequest
 from app.routers.deps import get_restaurant_context, require_roles
+from app.services.audit import write_audit_log
 from app.services.ocr import InvoiceOcrService
+from app.services.stock import apply_invoice_lines_to_stock
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 UPLOAD_ROOT = Path("/app/uploads/invoices")
@@ -42,33 +44,37 @@ async def upload_invoice(file: UploadFile = File(...), ctx=Depends(require_roles
             "status": "OCR_PROCESSING",
         }
     )
-    await db.auditlog.create(
-        data={
-            "restaurantId": ctx["restaurant_id"],
-            "userId": ctx["user"].id,
-            "action": "invoice.uploaded",
-            "entity": "SupplierInvoice",
-            "entityId": invoice.id,
-            "metadata": {"filename": file.filename, "size": len(content)},
-        }
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action="invoice.uploaded",
+        entity="SupplierInvoice",
+        entity_id=invoice.id,
+        metadata={"filename": file.filename, "size": len(content)},
     )
     return await _process_invoice(invoice.id, ctx)
 
 
 @router.post("/{invoice_id}/process")
 async def process_invoice(invoice_id: str, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF", "ACCOUNTANT"))):
+    invoice = await _get_invoice(invoice_id, ctx["restaurant_id"])
+    if invoice.status == "APPROVED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Approved invoice cannot be reprocessed")
     return await _process_invoice(invoice_id, ctx)
 
 
 @router.post("/{invoice_id}/approve")
 async def approve_invoice(invoice_id: str, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "ACCOUNTANT"))):
     invoice = await _get_invoice(invoice_id, ctx["restaurant_id"])
+    if invoice.status == "APPROVED":
+        return _serialize_invoice(invoice)
+    applied_lines = await apply_invoice_lines_to_stock(invoice, ctx["restaurant_id"])
     updated = await db.supplierinvoice.update(
         where={"id": invoice.id},
         data={"status": "APPROVED", "approvedAt": datetime.now(UTC), "rejectedReason": None},
         include={"supplier": True, "lines": True},
     )
-    await _audit(ctx, "invoice.approved", invoice.id)
+    await _audit(ctx, "invoice.approved", invoice.id, {"stockLinesApplied": applied_lines})
     return _serialize_invoice(updated)
 
 
@@ -79,6 +85,8 @@ async def reject_invoice(
     ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "ACCOUNTANT")),
 ):
     invoice = await _get_invoice(invoice_id, ctx["restaurant_id"])
+    if invoice.status == "APPROVED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Approved invoice cannot be rejected")
     updated = await db.supplierinvoice.update(
         where={"id": invoice.id},
         data={"status": "REJECTED", "rejectedReason": payload.reason},
@@ -139,22 +147,21 @@ async def _get_invoice(invoice_id: str, restaurant_id: str):
 
 
 async def _find_or_create_supplier(restaurant_id: str, name: str):
-    supplier = await db.supplier.find_first(where={"restaurantId": restaurant_id, "name": name})
+    supplier_name = name.strip() or "Fournisseur inconnu"
+    supplier = await db.supplier.find_first(where={"restaurantId": restaurant_id, "name": supplier_name})
     if supplier:
         return supplier
-    return await db.supplier.create(data={"restaurantId": restaurant_id, "name": name})
+    return await db.supplier.create(data={"restaurantId": restaurant_id, "name": supplier_name})
 
 
 async def _audit(ctx: dict, action: str, invoice_id: str, metadata: dict | None = None) -> None:
-    await db.auditlog.create(
-        data={
-            "restaurantId": ctx["restaurant_id"],
-            "userId": ctx["user"].id,
-            "action": action,
-            "entity": "SupplierInvoice",
-            "entityId": invoice_id,
-            "metadata": metadata,
-        }
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action=action,
+        entity="SupplierInvoice",
+        entity_id=invoice_id,
+        metadata=metadata,
     )
 
 

@@ -28,6 +28,8 @@ Pour reprendre apres interruption:
 - [x] 07 - Gestion fournisseurs de bout en bout
 - [x] 08 - Stocks intelligents de bout en bout
 - [x] 09 - Inventaires de bout en bout
+- [x] 10 - Fiches techniques et sous-recettes de bout en bout
+- [x] 11 - Durcissement bloc 1 suppliers, stock, invoices, inventory
 
 ## Modules cible
 
@@ -35,7 +37,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-09 - Inventaires de bout en bout.
+11 - Durcissement bloc 1 suppliers, stock, invoices, inventory.
 
 ## Commandes etape 02
 
@@ -72,7 +74,19 @@ open http://localhost:3000/suppliers
 
 - `git status --short --branch`: propre sur `main` avant l'etape 06.
 - `python3 -m py_compile` sur `apps/api`: OK apres etape 06.
-- `docker compose config`: non execute, `docker` absent de l'environnement hote.
+- `python3 -m py_compile apps/api`: echec attendu, la commande cible un dossier (`[Errno 21] Is a directory`).
+- `python3 -m py_compile apps/api/app/main.py apps/api/app/models/schemas.py apps/api/app/routers/suppliers.py apps/api/app/routers/inventory.py apps/api/app/routers/invoices.py apps/api/app/services/audit.py apps/api/app/services/stock.py apps/api/app/services/ocr.py`: OK apres etape 11.
+- `python3 -m compileall -q apps/api`: OK apres etape 11.
+- `docker compose config`: OK apres etape 11.
+- `pnpm --filter @ctd/db prisma:generate`: impossible dans l'environnement hote, `pnpm` absent.
+- `pnpm --filter @ctd/db prisma:migrate`: non execute dans l'environnement hote, `pnpm` absent.
+- `docker compose exec -T api prisma generate --schema /app/packages/db/prisma/schema.prisma`: OK apres etape 11.
+- `docker compose exec -T api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma`: OK apres etape 11, aucune migration en attente.
+- `pnpm --filter web build`: impossible dans l'environnement hote, `pnpm` absent.
+- `docker compose exec -T web pnpm --filter @ctd/web build`: OK apres etape 11.
+- `docker compose up --build`: OK apres autorisation Docker, API et web construits puis relances en detache.
+- `curl http://localhost:8000/health`: OK depuis l'environnement non sandboxe, service `Chez Therese et Denise`.
+- `curl -I http://localhost:3000/invoices`: OK depuis l'environnement non sandboxe, HTTP 200.
 - `pnpm --version`: non execute, `pnpm` absent de l'environnement hote. Les conteneurs utilisent Corepack.
 - `tsc --version`: non execute, `tsc` absent de l'environnement hote.
 - `git push origin main`: OK apres etape 07.
@@ -140,6 +154,48 @@ open http://localhost:3000/inventory
 - API: creation de sessions par zone ou articles, saisie des quantites comptees, calcul des ecarts, validation manager, ajustements stock et audit logs.
 - Frontend: page `/inventory` premium mobile first avec liste des sessions, comptage rapide, recherche de lignes, ecarts valorises et validation.
 
+## Commandes etape 10
+
+```bash
+docker compose up --build
+pnpm --filter @ctd/db prisma:migrate
+open http://localhost:3000/recipes
+```
+
+## Etape 10 - Details
+
+- Prisma: enrichissement recettes et sous-recettes avec rendements, couts, marges, allergenes et lignes d'ingredients liees au stock.
+- API: CRUD recettes, CRUD sous-recettes, ajout/retrait ingredients, recalcul cout matiere, marge theorique, allergenes, duplication et audit logs.
+- Frontend: page `/recipes` premium mobile first avec dashboard recettes, recherche, fiche detaillee, ingredients, cout par portion, prix conseille, marge, allergenes et sous-recettes reutilisables.
+
+## Commandes etape 11
+
+```bash
+git status --short --branch
+python3 -m py_compile apps/api/app/main.py apps/api/app/models/schemas.py apps/api/app/routers/suppliers.py apps/api/app/routers/inventory.py apps/api/app/routers/invoices.py apps/api/app/services/audit.py apps/api/app/services/stock.py apps/api/app/services/ocr.py
+python3 -m compileall -q apps/api
+docker compose config
+pnpm --filter @ctd/db prisma:generate
+pnpm --filter @ctd/db prisma:migrate
+pnpm --filter web build
+docker compose exec -T api prisma generate --schema /app/packages/db/prisma/schema.prisma
+docker compose exec -T api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma
+docker compose exec -T web pnpm --filter @ctd/web build
+```
+
+## Etape 11 - Details
+
+- API: validation Pydantic renforcee pour fournisseurs, articles stock, mouvements et inventaires.
+- API: PATCH fournisseurs et stock permet maintenant de vider les champs optionnels sans ignorer les valeurs `null`.
+- API: verification multi-restaurant des fournisseurs attaches au stock, centralisation des audit logs et service metier stock.
+- API: approbation facture idempotente qui cree les mouvements d'achat et alimente les articles stock a partir des lignes facture.
+- API: factures approuvees protegees contre relance OCR/rejet qui desynchroniseraient le stock.
+- API: inventaires valides non modifiables et validation idempotente pour eviter les doubles ajustements.
+- OCR: suppression des lignes fixes de demonstration, extraction locale basee sur le contenu texte du fichier et confiance basse si document peu lisible.
+- Frontend: validations visibles avant sauvegarde pour fournisseurs, stock et inventaires.
+- Frontend: boutons des factures/inventaires desactives selon les etats metier et listes vides distinctes des chargements.
+- Frontend: correction du module `/recipes` manquant pour debloquer le build Next.js, avec chargement reel `/recipes` et creation simple connectee a l'API.
+
 ## Prochaine etape recommandee
 
-Brancher le module fiches techniques et sous-recettes de bout en bout: ingredients, rendements, couts matieres, marges et allergenes.
+Commiter et pousser l'etape 11, puis reprendre le bloc 2 avec recipes, sub-recipes, food-cost, margins et allergens.

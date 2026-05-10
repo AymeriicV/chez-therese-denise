@@ -1,10 +1,19 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.db.prisma import db
-from app.models.schemas import InventoryCountUpdate, InventoryItemCreate, InventorySessionCreate, StockMovementCreate
+from app.models.schemas import (
+    InventoryCountUpdate,
+    InventoryItemCreate,
+    InventoryItemUpdate,
+    InventorySessionCreate,
+    StockMovementCreate,
+)
 from app.routers.deps import get_restaurant_context, require_roles
+from app.services.audit import write_audit_log
+from app.services.stock import create_stock_movement, ensure_supplier_belongs_to_restaurant
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
@@ -32,7 +41,7 @@ async def stock_alerts(ctx=Depends(get_restaurant_context)):
 @router.get("/summary")
 async def stock_summary(ctx=Depends(get_restaurant_context)):
     items = await db.inventoryitem.find_many(where={"restaurantId": ctx["restaurant_id"]})
-    total_value = sum((item.quantityOnHand * item.averageCost for item in items), 0)
+    total_value = sum((item.quantityOnHand * item.averageCost for item in items), Decimal("0"))
     alert_count = len([item for item in items if item.quantityOnHand <= item.reorderPoint])
     return {
         "item_count": len(items),
@@ -44,7 +53,8 @@ async def stock_summary(ctx=Depends(get_restaurant_context)):
 
 @router.post("")
 async def create_item(payload: InventoryItemCreate, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF"))):
-    return await db.inventoryitem.create(
+    await ensure_supplier_belongs_to_restaurant(payload.supplier_id, ctx["restaurant_id"])
+    item = await db.inventoryitem.create(
         data={
             "restaurantId": ctx["restaurant_id"],
             "sku": payload.sku,
@@ -57,8 +67,61 @@ async def create_item(payload: InventoryItemCreate, ctx=Depends(require_roles("O
             "reorderPoint": payload.reorder_point,
             "averageCost": payload.average_cost,
             "allergens": payload.allergens,
-        }
+        },
+        include={"supplier": True, "movements": True},
     )
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action="stock.item_created",
+        entity="InventoryItem",
+        entity_id=item.id,
+    )
+    return _serialize_item(item)
+
+
+@router.patch("/{item_id}")
+async def update_item(
+    item_id: str,
+    payload: InventoryItemUpdate,
+    ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF")),
+):
+    item = await db.inventoryitem.find_first(where={"id": item_id, "restaurantId": ctx["restaurant_id"]})
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory item not found")
+    if "supplier_id" in payload.model_fields_set:
+        await ensure_supplier_belongs_to_restaurant(payload.supplier_id, ctx["restaurant_id"])
+    field_map = {
+        "sku": "sku",
+        "supplier_id": "supplierId",
+        "name": "name",
+        "category": "category",
+        "storage_area": "storageArea",
+        "unit": "unit",
+        "quantity_on_hand": "quantityOnHand",
+        "reorder_point": "reorderPoint",
+        "average_cost": "averageCost",
+        "allergens": "allergens",
+    }
+    nullable_fields = {"sku", "supplierId", "storageArea"}
+    data = {
+        field_map[key]: value
+        for key, value in payload.model_dump(exclude_unset=True).items()
+        if value is not None or field_map[key] in nullable_fields
+    }
+    updated = await db.inventoryitem.update(
+        where={"id": item.id},
+        data=data,
+        include={"supplier": True, "movements": True},
+    )
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action="stock.item_updated",
+        entity="InventoryItem",
+        entity_id=item.id,
+    )
+    return _serialize_item(updated)
 
 
 @router.post("/movements")
@@ -68,28 +131,20 @@ async def create_movement(payload: StockMovementCreate, ctx=Depends(require_role
     )
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory item not found")
-    movement = await db.stockmovement.create(
-        data={
-            "inventoryItemId": item.id,
-            "type": payload.type,
-            "quantity": payload.quantity,
-            "unitCost": payload.unit_cost,
-            "note": payload.note,
-        }
+    movement = await create_stock_movement(
+        item=item,
+        movement_type=payload.type,
+        quantity=payload.quantity,
+        unit_cost=payload.unit_cost,
+        note=payload.note,
     )
-    await db.inventoryitem.update(
-        where={"id": item.id},
-        data={"quantityOnHand": item.quantityOnHand + payload.quantity},
-    )
-    await db.auditlog.create(
-        data={
-            "restaurantId": ctx["restaurant_id"],
-            "userId": ctx["user"].id,
-            "action": "stock.movement_created",
-            "entity": "StockMovement",
-            "entityId": movement.id,
-            "metadata": {"itemId": item.id, "quantity": str(payload.quantity), "type": payload.type},
-        }
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action="stock.movement_created",
+        entity="StockMovement",
+        entity_id=movement.id,
+        metadata={"itemId": item.id, "quantity": str(payload.quantity), "type": payload.type},
     )
     return movement
 
@@ -156,14 +211,12 @@ async def create_inventory_session(
         },
         include={"lines": {"include": {"item": True}}},
     )
-    await db.auditlog.create(
-        data={
-            "restaurantId": ctx["restaurant_id"],
-            "userId": ctx["user"].id,
-            "action": "inventory.session_created",
-            "entity": "InventoryCountSession",
-            "entityId": session.id,
-        }
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action="inventory.session_created",
+        entity="InventoryCountSession",
+        entity_id=session.id,
     )
     return _serialize_session(session)
 
@@ -176,6 +229,8 @@ async def update_inventory_count(
     ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF")),
 ):
     session = await _get_session(session_id, ctx["restaurant_id"])
+    if session.status == "VALIDATED":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Validated inventory cannot be edited")
     line = next((entry for entry in session.lines if entry.id == line_id), None)
     if not line:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory count line not found")
@@ -189,12 +244,22 @@ async def update_inventory_count(
         include={"item": True},
     )
     await db.inventorycountsession.update(where={"id": session.id}, data={"status": "REVIEW"})
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action="inventory.line_counted",
+        entity="InventoryCountLine",
+        entity_id=line.id,
+        metadata={"sessionId": session.id, "countedQty": str(payload.counted_qty)},
+    )
     return _serialize_count_line(updated_line)
 
 
 @router.post("/sessions/{session_id}/validate")
 async def validate_inventory_session(session_id: str, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER"))):
     session = await _get_session(session_id, ctx["restaurant_id"])
+    if session.status == "VALIDATED":
+        return _serialize_session(session)
     for line in session.lines:
         if line.countedQty is None:
             continue
@@ -216,14 +281,12 @@ async def validate_inventory_session(session_id: str, ctx=Depends(require_roles(
         data={"status": "VALIDATED", "validatedAt": datetime.now(UTC)},
         include={"lines": {"include": {"item": True}}},
     )
-    await db.auditlog.create(
-        data={
-            "restaurantId": ctx["restaurant_id"],
-            "userId": ctx["user"].id,
-            "action": "inventory.session_validated",
-            "entity": "InventoryCountSession",
-            "entityId": session.id,
-        }
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action="inventory.session_validated",
+        entity="InventoryCountSession",
+        entity_id=session.id,
     )
     return _serialize_session(updated)
 

@@ -7,6 +7,7 @@ import {
   ScanLine,
   TrendingUp,
   Truck,
+  type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Topbar } from "@/components/shell/topbar";
@@ -20,7 +21,7 @@ const kpis = [
   { label: "Conformite HACCP", value: "98%", delta: "Stable", icon: BadgeCheck },
 ];
 
-const modules = [
+const modules: Array<[string, string, string, LucideIcon]> = [
   ["OCR factures", "Extraction IA, validation et rapprochement fournisseur", "12 en revue", FileText],
   ["Stocks intelligents", "Seuils, mouvements, inventaires et couts moyens", "8 alertes", Package],
   ["Commandes", "Bons fournisseurs et sync caisse L'Addition", "4 brouillons", Truck],

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.db.prisma import db
 from app.models.schemas import SupplierCreate, SupplierUpdate
 from app.routers.deps import get_restaurant_context, require_roles
+from app.services.audit import write_audit_log
 
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 
@@ -42,14 +43,12 @@ async def create_supplier(payload: SupplierCreate, ctx=Depends(require_roles("OW
             "leadTimeDays": payload.lead_time_days,
         }
     )
-    await db.auditlog.create(
-        data={
-            "restaurantId": ctx["restaurant_id"],
-            "userId": ctx["user"].id,
-            "action": "supplier.created",
-            "entity": "Supplier",
-            "entityId": supplier.id,
-        }
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action="supplier.created",
+        entity="Supplier",
+        entity_id=supplier.id,
     )
     return _serialize_supplier(await _get_supplier(supplier.id, ctx["restaurant_id"]))
 
@@ -61,32 +60,36 @@ async def update_supplier(
     ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER")),
 ):
     supplier = await _get_supplier(supplier_id, ctx["restaurant_id"])
+    field_map = {
+        "name": "name",
+        "contact_name": "contactName",
+        "email": "email",
+        "phone": "phone",
+        "address": "address",
+        "categories": "categories",
+        "payment_terms": "paymentTerms",
+        "minimum_order": "minimumOrder",
+        "rating": "rating",
+        "lead_time_days": "leadTimeDays",
+        "is_active": "isActive",
+    }
+    nullable_fields = {"contactName", "email", "phone", "address", "paymentTerms", "minimumOrder", "rating"}
     data = {
-        "name": payload.name,
-        "contactName": payload.contact_name,
-        "email": payload.email,
-        "phone": payload.phone,
-        "address": payload.address,
-        "categories": payload.categories,
-        "paymentTerms": payload.payment_terms,
-        "minimumOrder": payload.minimum_order,
-        "rating": payload.rating,
-        "leadTimeDays": payload.lead_time_days,
-        "isActive": payload.is_active,
+        field_map[key]: value
+        for key, value in payload.model_dump(exclude_unset=True).items()
+        if value is not None or field_map[key] in nullable_fields
     }
     updated = await db.supplier.update(
         where={"id": supplier.id},
-        data={key: value for key, value in data.items() if value is not None},
+        data=data,
         include={"invoices": True},
     )
-    await db.auditlog.create(
-        data={
-            "restaurantId": ctx["restaurant_id"],
-            "userId": ctx["user"].id,
-            "action": "supplier.updated",
-            "entity": "Supplier",
-            "entityId": supplier.id,
-        }
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action="supplier.updated",
+        entity="Supplier",
+        entity_id=supplier.id,
     )
     return _serialize_supplier(updated)
 
@@ -99,14 +102,12 @@ async def archive_supplier(supplier_id: str, ctx=Depends(require_roles("OWNER", 
         data={"isActive": False},
         include={"invoices": True},
     )
-    await db.auditlog.create(
-        data={
-            "restaurantId": ctx["restaurant_id"],
-            "userId": ctx["user"].id,
-            "action": "supplier.archived",
-            "entity": "Supplier",
-            "entityId": supplier.id,
-        }
+    await write_audit_log(
+        restaurant_id=ctx["restaurant_id"],
+        user_id=ctx["user"].id,
+        action="supplier.archived",
+        entity="Supplier",
+        entity_id=supplier.id,
     )
     return _serialize_supplier(updated)
 

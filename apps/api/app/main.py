@@ -6,7 +6,7 @@ from fastapi.responses import ORJSONResponse
 
 from app.core.config import get_settings
 from app.db.prisma import connect_db, disconnect_db
-from app.routers import auth, dashboard, inventory, invoices, quality, realtime, suppliers
+from app.routers import auth, dashboard, inventory, invoices, quality, realtime, recipes, suppliers
 
 
 @asynccontextmanager
@@ -40,6 +40,7 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(suppliers.router, prefix="/api/v1")
 app.include_router(inventory.router, prefix="/api/v1")
+app.include_router(recipes.router, prefix="/api/v1")
 app.include_router(invoices.router, prefix="/api/v1")
 app.include_router(quality.router, prefix="/api/v1")
 app.include_router(realtime.router, prefix="/api/v1")

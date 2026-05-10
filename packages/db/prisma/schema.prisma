@@ -177,6 +177,8 @@ model InventoryItem {
   supplier       Supplier?       @relation(fields: [supplierId], references: [id])
   movements      StockMovement[]
   countLines     InventoryCountLine[]
+  recipeIngredients RecipeIngredient[]
+  subRecipeIngredients SubRecipeIngredient[]
 }
 
 model StockMovement {
@@ -221,28 +223,75 @@ model InventoryCountLine {
 }
 
 model Recipe {
-  id           String     @id @default(uuid())
-  restaurantId String
-  name         String
-  sellingPrice Decimal    @default(0) @db.Decimal(12, 2)
-  foodCost     Decimal    @default(0) @db.Decimal(12, 2)
-  marginRate   Decimal    @default(0) @db.Decimal(8, 4)
-  allergens    String[]   @default([])
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  id             String             @id @default(uuid())
+  restaurantId   String
+  name           String
+  category       String?
+  portionYield   Decimal            @default(1) @db.Decimal(12, 3)
+  sellingPrice   Decimal            @default(0) @db.Decimal(12, 2)
+  foodCost       Decimal            @default(0) @db.Decimal(12, 2)
+  costPerPortion Decimal            @default(0) @db.Decimal(12, 2)
+  marginRate     Decimal            @default(0) @db.Decimal(8, 4)
+  allergens      String[]           @default([])
+  instructions   String?
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  restaurant     Restaurant         @relation(fields: [restaurantId], references: [id])
+  ingredients    RecipeIngredient[]
 }
 
 model SubRecipe {
-  id           String     @id @default(uuid())
-  restaurantId String
-  name         String
-  batchUnit    String
-  batchYield   Decimal    @db.Decimal(12, 3)
-  cost         Decimal    @default(0) @db.Decimal(12, 2)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  id             String                @id @default(uuid())
+  restaurantId   String
+  name           String
+  category       String?
+  batchUnit      String
+  batchYield     Decimal               @db.Decimal(12, 3)
+  cost           Decimal               @default(0) @db.Decimal(12, 2)
+  costPerUnit    Decimal               @default(0) @db.Decimal(12, 4)
+  allergens      String[]              @default([])
+  instructions   String?
+  isActive       Boolean               @default(true)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  restaurant     Restaurant            @relation(fields: [restaurantId], references: [id])
+  ingredients    SubRecipeIngredient[] @relation("SubRecipeIngredients")
+  recipeUsages   RecipeIngredient[]    @relation("RecipeIngredientSubRecipe")
+}
+
+model RecipeIngredient {
+  id                String         @id @default(uuid())
+  recipeId          String
+  inventoryItemId   String?
+  subRecipeId       String?
+  name              String
+  quantity          Decimal        @db.Decimal(12, 3)
+  unit              String
+  unitCostSnapshot  Decimal        @default(0) @db.Decimal(12, 4)
+  wasteRate         Decimal        @default(0) @db.Decimal(8, 4)
+  totalCost         Decimal        @default(0) @db.Decimal(12, 2)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  recipe            Recipe         @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  inventoryItem     InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  subRecipe         SubRecipe?     @relation("RecipeIngredientSubRecipe", fields: [subRecipeId], references: [id], onDelete: SetNull)
+}
+
+model SubRecipeIngredient {
+  id                String         @id @default(uuid())
+  subRecipeId       String
+  inventoryItemId   String?
+  name              String
+  quantity          Decimal        @db.Decimal(12, 3)
+  unit              String
+  unitCostSnapshot  Decimal        @default(0) @db.Decimal(12, 4)
+  wasteRate         Decimal        @default(0) @db.Decimal(8, 4)
+  totalCost         Decimal        @default(0) @db.Decimal(12, 2)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  subRecipe         SubRecipe      @relation("SubRecipeIngredients", fields: [subRecipeId], references: [id], onDelete: Cascade)
+  inventoryItem     InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
 }
 
 model TemperatureLog {

@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -33,62 +33,119 @@ class UserOut(BaseModel):
 
 
 class SupplierCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=2, max_length=160)
     contact_name: str | None = None
     email: EmailStr | None = None
     phone: str | None = None
     address: str | None = None
-    categories: list[str] = []
+    categories: list[str] = Field(default_factory=list)
     payment_terms: str | None = None
-    minimum_order: Decimal | None = None
-    rating: Decimal | None = None
-    lead_time_days: int = 2
+    minimum_order: Decimal | None = Field(default=None, ge=0)
+    rating: Decimal | None = Field(default=None, ge=0, le=5)
+    lead_time_days: int = Field(default=2, ge=0, le=90)
 
 
 class SupplierUpdate(BaseModel):
-    name: str | None = None
+    name: str | None = Field(default=None, min_length=2, max_length=160)
     contact_name: str | None = None
     email: EmailStr | None = None
     phone: str | None = None
     address: str | None = None
     categories: list[str] | None = None
     payment_terms: str | None = None
-    minimum_order: Decimal | None = None
-    rating: Decimal | None = None
-    lead_time_days: int | None = None
+    minimum_order: Decimal | None = Field(default=None, ge=0)
+    rating: Decimal | None = Field(default=None, ge=0, le=5)
+    lead_time_days: int | None = Field(default=None, ge=0, le=90)
     is_active: bool | None = None
 
 
 class InventoryItemCreate(BaseModel):
-    name: str
-    category: str
-    unit: str
+    name: str = Field(min_length=2, max_length=180)
+    category: str = Field(min_length=2, max_length=120)
+    unit: str = Field(min_length=1, max_length=32)
     sku: str | None = None
     supplier_id: str | None = None
     storage_area: str | None = None
-    quantity_on_hand: Decimal = Decimal("0")
-    reorder_point: Decimal = Decimal("0")
-    average_cost: Decimal = Decimal("0")
-    allergens: list[str] = []
+    quantity_on_hand: Decimal = Field(default=Decimal("0"), ge=0)
+    reorder_point: Decimal = Field(default=Decimal("0"), ge=0)
+    average_cost: Decimal = Field(default=Decimal("0"), ge=0)
+    allergens: list[str] = Field(default_factory=list)
+
+
+class InventoryItemUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=180)
+    category: str | None = Field(default=None, min_length=2, max_length=120)
+    unit: str | None = Field(default=None, min_length=1, max_length=32)
+    sku: str | None = None
+    supplier_id: str | None = None
+    storage_area: str | None = None
+    quantity_on_hand: Decimal | None = Field(default=None, ge=0)
+    reorder_point: Decimal | None = Field(default=None, ge=0)
+    average_cost: Decimal | None = Field(default=None, ge=0)
+    allergens: list[str] | None = None
 
 
 class StockMovementCreate(BaseModel):
     inventory_item_id: str
-    type: str
+    type: Literal["PURCHASE", "PRODUCTION", "WASTE", "INVENTORY_ADJUSTMENT", "SALE", "TRANSFER"]
     quantity: Decimal
-    unit_cost: Decimal | None = None
+    unit_cost: Decimal | None = Field(default=None, ge=0)
     note: str | None = None
 
 
 class InventorySessionCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=2, max_length=180)
     storage_area: str | None = None
-    item_ids: list[str] = []
+    item_ids: list[str] = Field(default_factory=list)
 
 
 class InventoryCountUpdate(BaseModel):
-    counted_qty: Decimal
+    counted_qty: Decimal = Field(ge=0)
     note: str | None = None
+
+
+class RecipeCreate(BaseModel):
+    name: str
+    category: str | None = None
+    portion_yield: Decimal = Decimal("1")
+    selling_price: Decimal = Decimal("0")
+    instructions: str | None = None
+
+
+class RecipeUpdate(BaseModel):
+    name: str | None = None
+    category: str | None = None
+    portion_yield: Decimal | None = None
+    selling_price: Decimal | None = None
+    instructions: str | None = None
+    is_active: bool | None = None
+
+
+class RecipeIngredientCreate(BaseModel):
+    inventory_item_id: str | None = None
+    sub_recipe_id: str | None = None
+    name: str | None = None
+    quantity: Decimal
+    unit: str | None = None
+    unit_cost: Decimal | None = None
+    waste_rate: Decimal = Decimal("0")
+
+
+class SubRecipeCreate(BaseModel):
+    name: str
+    category: str | None = None
+    batch_unit: str
+    batch_yield: Decimal
+    instructions: str | None = None
+
+
+class SubRecipeUpdate(BaseModel):
+    name: str | None = None
+    category: str | None = None
+    batch_unit: str | None = None
+    batch_yield: Decimal | None = None
+    instructions: str | None = None
+    is_active: bool | None = None
 
 
 class TemperatureCreate(BaseModel):
@@ -122,7 +179,7 @@ class InvoiceOut(BaseModel):
     processed_at: datetime | None = None
     approved_at: datetime | None = None
     rejected_reason: str | None = None
-    lines: list[InvoiceLineOut] = []
+    lines: list[InvoiceLineOut] = Field(default_factory=list)
 
 
 class InvoiceRejectRequest(BaseModel):
