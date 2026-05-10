@@ -1,4 +1,16 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const CONFIGURED_API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+function getApiUrl() {
+  if (typeof window === "undefined") return CONFIGURED_API_URL;
+  const configured = new URL(CONFIGURED_API_URL);
+  const browserHost = window.location.hostname;
+  const configuredIsLoopback = ["localhost", "127.0.0.1", "0.0.0.0"].includes(configured.hostname);
+  const browserIsLoopback = ["localhost", "127.0.0.1", "0.0.0.0"].includes(browserHost);
+  if (configuredIsLoopback && !browserIsLoopback) {
+    configured.hostname = browserHost;
+  }
+  return configured.toString().replace(/\/$/, "");
+}
 
 export class ApiError extends Error {
   status: number;
@@ -42,7 +54,7 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (restaurantId) headers.set("X-Restaurant-Id", restaurantId);
 
-  const response = await fetch(`${API_URL}/api/v1${path}`, {
+  const response = await fetch(`${getApiUrl()}/api/v1${path}`, {
     ...options,
     headers,
   });

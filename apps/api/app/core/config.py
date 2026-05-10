@@ -11,7 +11,11 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(alias="JWT_SECRET")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     access_token_expire_minutes: int = Field(default=60, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    cors_origin_regex: str = Field(
+        default=r"^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|[0-9]{1,3}(\.[0-9]{1,3}){3})(:\d+)?$",
+        alias="CORS_ORIGIN_REGEX",
+    )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
 
