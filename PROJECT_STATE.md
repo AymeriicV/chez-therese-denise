@@ -31,6 +31,7 @@ Pour reprendre apres interruption:
 - [x] 10 - Fiches techniques et sous-recettes de bout en bout
 - [x] 11 - Durcissement bloc 1 suppliers, stock, invoices, inventory
 - [x] 12 - UI FR, allergenes automatiques, fiches techniques exploitables et archivage
+- [x] 13 - HACCP PMS, temperatures et etiquettes exploitables
 
 ## Modules cible
 
@@ -38,7 +39,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-Improve French UI, allergens and recipe workflow.
+Add HACCP temperatures and labels workflows.
 
 ## Commandes etape 02
 
@@ -255,3 +256,25 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - Login local `aymericvenacterpro@gmail.com / admin`: OK.
 - Endpoints valides avec JWT et `X-Restaurant-Id`: fournisseurs, stock, recettes.
 - Parcours API valide: creation/archive fournisseur, creation/archive article stock avec allergene Poisson, creation fiche technique, ajout/modification ingredient Lieu noir, recalcul couts/marge/allergenes, archivage fiche.
+
+## Etape 13 - Details
+
+- Prisma: ajout `HaccpTask` et `FoodLabel`, enrichissement `TemperatureLog` avec plages cibles, notes et archivage logique.
+- API: endpoints `/api/v1/quality/summary`, `/quality/temperatures`, `/quality/haccp/tasks`, `/quality/labels`.
+- API: CRUD complet, archivage logique, validations metier, roles et audit logs pour HACCP, temperatures et etiquettes.
+- Frontend: pages `/haccp`, `/temperatures` et `/labels` remplacees par de vrais modules connectes API.
+- Frontend: formulaires FR, loading/empty/error, messages succes, confirmations d'archivage et mise a jour immediate du state.
+
+## Validation etape 13
+
+- `python3 -m compileall -q apps/api`: OK.
+- `git diff --check`: OK.
+- `docker compose run --rm api prisma generate --schema /app/packages/db/prisma/schema.prisma`: OK.
+- `docker compose run --rm api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma`: OK, migration `20260510170000_quality_haccp_labels` appliquee.
+- `docker compose run --rm --no-deps web pnpm --filter @ctd/web build`: OK.
+- `docker compose up --build -d`: OK.
+- `curl http://localhost:8000/health`: OK.
+- `curl -I http://localhost:3000/haccp`: HTTP 200.
+- `curl -I http://localhost:3000/temperatures`: HTTP 200.
+- `curl -I http://localhost:3000/labels`: HTTP 200.
+- Parcours API valide: creation/mise a jour/archivage temperature, creation/validation/archivage tache HACCP, creation/statut imprime/archivage etiquette.

@@ -28,6 +28,7 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Archivage logique fournisseurs, articles stock, fiches techniques et sous-recettes.
 - UI principale traduite en francais sur les modules prioritaires.
 - Audit logs corriges pour Prisma Python regenere.
+- Modules HACCP/PMS, temperatures et etiquettes livres avec Prisma, API, UI FR, audit logs, validations, CRUD et archivage logique.
 
 ## Validation realisee
 
@@ -40,7 +41,8 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - `curl -I http://localhost:3000/dashboard`: HTTP 200.
 - Login `aymericvenacterpro@gmail.com / admin`: OK.
 - API testee: fournisseurs, stock, recettes, ingredients recettes, archivage.
+- API qualite testee: temperatures, taches HACCP, etiquettes, summary et archivage.
 
 ## Prochaine reprise
 
-Continuer avec les sous-recettes avancees, couts matieres, marges et allergenes consolides. Garder la meme regle: aucun bouton decoratif, mutations branchees API, erreurs visibles et state UI mis a jour depuis les reponses backend.
+Continuer avec production labo et commandes fournisseurs, ou reprendre sous-recettes avancees, couts matieres, marges et allergenes consolides. Garder la meme regle: aucun bouton decoratif, mutations branchees API, erreurs visibles et state UI mis a jour depuis les reponses backend.

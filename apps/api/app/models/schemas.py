@@ -159,10 +159,72 @@ class SubRecipeUpdate(BaseModel):
 
 
 class TemperatureCreate(BaseModel):
-    equipment: str
-    value_celsius: Decimal
-    is_compliant: bool
+    equipment: str = Field(min_length=2, max_length=160)
+    value_celsius: Decimal = Field(ge=-80, le=300)
+    min_celsius: Decimal | None = Field(default=None, ge=-80, le=300)
+    max_celsius: Decimal | None = Field(default=None, ge=-80, le=300)
+    recorded_at: datetime | None = None
+    is_compliant: bool | None = None
     corrective_action: str | None = None
+    note: str | None = None
+
+
+class TemperatureUpdate(BaseModel):
+    equipment: str | None = Field(default=None, min_length=2, max_length=160)
+    value_celsius: Decimal | None = Field(default=None, ge=-80, le=300)
+    min_celsius: Decimal | None = Field(default=None, ge=-80, le=300)
+    max_celsius: Decimal | None = Field(default=None, ge=-80, le=300)
+    recorded_at: datetime | None = None
+    is_compliant: bool | None = None
+    corrective_action: str | None = None
+    note: str | None = None
+
+
+class HaccpTaskCreate(BaseModel):
+    title: str = Field(min_length=2, max_length=180)
+    category: str = Field(min_length=2, max_length=120)
+    frequency: Literal["DAILY", "WEEKLY", "MONTHLY", "ON_DEMAND"] = "DAILY"
+    due_at: datetime | None = None
+    notes: str | None = None
+
+
+class HaccpTaskUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=2, max_length=180)
+    category: str | None = Field(default=None, min_length=2, max_length=120)
+    frequency: Literal["DAILY", "WEEKLY", "MONTHLY", "ON_DEMAND"] | None = None
+    status: Literal["TODO", "DONE", "NON_COMPLIANT"] | None = None
+    due_at: datetime | None = None
+    completed_at: datetime | None = None
+    completed_by: str | None = None
+    corrective_action: str | None = None
+    notes: str | None = None
+
+
+class FoodLabelCreate(BaseModel):
+    title: str = Field(min_length=2, max_length=180)
+    item_name: str = Field(min_length=2, max_length=180)
+    batch_number: str | None = None
+    quantity: Decimal | None = Field(default=None, ge=0)
+    unit: str | None = None
+    prepared_at: datetime
+    expires_at: datetime
+    storage_area: str | None = None
+    allergens: list[str] = Field(default_factory=list)
+    notes: str | None = None
+
+
+class FoodLabelUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=2, max_length=180)
+    item_name: str | None = Field(default=None, min_length=2, max_length=180)
+    batch_number: str | None = None
+    quantity: Decimal | None = Field(default=None, ge=0)
+    unit: str | None = None
+    prepared_at: datetime | None = None
+    expires_at: datetime | None = None
+    storage_area: str | None = None
+    allergens: list[str] | None = None
+    notes: str | None = None
+    status: Literal["ACTIVE", "PRINTED", "EXPIRED"] | None = None
 
 
 class InvoiceLineOut(BaseModel):
