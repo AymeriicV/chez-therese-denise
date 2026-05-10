@@ -50,7 +50,7 @@ class InvoiceOcrService:
         stem = Path(original_name).stem.replace("_", " ").replace("-", " ").strip()
         selected_supplier = supplier_name or self._extract_supplier(text) or self._guess_supplier(stem)
         template_keywords = self._keywords_from_template(template)
-        lines = self._extract_lines(text, template_keywords)
+        lines, structured_rows = self._extract_lines(text, template_keywords, supplier_name=selected_supplier)
         total_ht = self._extract_amount(text, ("total ht", "total hors taxe", "montant ht"))
         total_ttc = self._extract_amount(text, ("total ttc", "net a payer", "net à payer", "total"))
         if total_ht is None:
@@ -87,6 +87,7 @@ class InvoiceOcrService:
                 "line_count": len(lines),
                 "template_keywords": template_keywords,
                 "template_name": template.get("name") if template else None,
+                "structured_rows": structured_rows,
             },
         )
 
@@ -112,10 +113,14 @@ class InvoiceOcrService:
     def _ocr_image(path: Path) -> str:
         try:
             with Image.open(path) as image:
-                text = pytesseract.image_to_string(image, config="--psm 6")
+                variants = [
+                    pytesseract.image_to_string(image, config="--psm 6"),
+                    pytesseract.image_to_string(image, config="--psm 4"),
+                    pytesseract.image_to_string(image.resize((image.width * 2, image.height * 2)), config="--psm 6"),
+                ]
         except Exception:
             return ""
-        return InvoiceOcrService._normalize_text(text)
+        return InvoiceOcrService._merge_ocr_variants(variants)
 
     @staticmethod
     def _extract_pdf_text(path: Path) -> str:
@@ -146,10 +151,15 @@ class InvoiceOcrService:
             try:
                 pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
                 with Image.open(BytesIO(pixmap.tobytes("png"))) as image:
-                    chunks.append(pytesseract.image_to_string(image, config="--psm 6"))
+                    chunks.extend(
+                        [
+                            pytesseract.image_to_string(image, config="--psm 6"),
+                            pytesseract.image_to_string(image, config="--psm 4"),
+                        ]
+                    )
             except Exception:
                 continue
-        return InvoiceOcrService._normalize_text("\n".join(chunks))
+        return InvoiceOcrService._merge_ocr_variants(chunks)
 
     @staticmethod
     def _extract_supplier(text: str) -> str | None:
@@ -178,7 +188,17 @@ class InvoiceOcrService:
             return None
 
     @classmethod
-    def _extract_lines(cls, text: str, template_keywords: list[str] | None = None) -> list[ExtractedInvoiceLine]:
+    def _extract_lines(
+        cls,
+        text: str,
+        template_keywords: list[str] | None = None,
+        *,
+        supplier_name: str | None = None,
+    ) -> tuple[list[ExtractedInvoiceLine], list[dict]]:
+        if cls._is_transgourmet_supplier(supplier_name, template_keywords, text):
+            transgourmet_lines, structured_rows = cls._extract_transgourmet_lines(text)
+            if transgourmet_lines:
+                return transgourmet_lines, structured_rows
         lines: list[ExtractedInvoiceLine] = []
         seen_labels: set[str] = set()
         table_started = False
@@ -261,7 +281,7 @@ class InvoiceOcrService:
                             confidence=Decimal("0.4200"),
                         )
                     )
-        return lines[:200]
+        return lines[:200], []
 
     @classmethod
     def _extract_amount(cls, text: str, labels: tuple[str, ...]) -> Decimal | None:
@@ -297,6 +317,20 @@ class InvoiceOcrService:
             if line:
                 lines.append(line)
         return "\n".join(lines)
+
+    @staticmethod
+    def _merge_ocr_variants(texts: list[str]) -> str:
+        merged_lines: list[str] = []
+        seen: set[str] = set()
+        for text in texts:
+            normalized = InvoiceOcrService._normalize_text(text)
+            for line in normalized.splitlines():
+                key = re.sub(r"\s+", " ", line).strip().lower()
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                merged_lines.append(line)
+        return "\n".join(merged_lines)
 
     @staticmethod
     def _looks_like_line_candidate(line: str) -> bool:
@@ -361,3 +395,171 @@ class InvoiceOcrService:
         if template_keywords:
             base += Decimal("0.0500")
         return min(base, Decimal("0.9800")).quantize(Decimal("0.0001"))
+
+    @staticmethod
+    def _is_transgourmet_supplier(supplier_name: str | None, template_keywords: list[str] | None, text: str) -> bool:
+        joined = " ".join([supplier_name or "", " ".join(template_keywords or []), text[:1000]]).lower()
+        return "transgourmet" in joined
+
+    @classmethod
+    def _extract_transgourmet_lines(cls, text: str) -> tuple[list[ExtractedInvoiceLine], list[dict]]:
+        raw_lines = text.splitlines()
+        table_start = None
+        table_end = len(raw_lines)
+        for index, raw_line in enumerate(raw_lines):
+            lowered = raw_line.lower()
+            if table_start is None and "article" in lowered and ("designation" in lowered or "désignation" in lowered):
+                table_start = index
+                continue
+            if table_start is not None and any(token in lowered for token in ("soustotal", "sous-total", "montant ht", "montant ttc", "net a payer", "net à payer")):
+                table_end = index
+                break
+        if table_start is None:
+            return [], []
+
+        segments: list[list[str]] = []
+        current: list[str] = []
+        for index in range(table_start + 1, table_end):
+            line = cls._normalize_text(raw_lines[index]).strip(" |:;")
+            if not line:
+                continue
+            lowered = line.lower()
+            if "article" in lowered and "designation" in lowered:
+                continue
+            has_code = bool(re.search(r"\b\d{5,6}\b", line))
+            if has_code:
+                if current:
+                    segments.append(current)
+                current = []
+                previous = cls._normalize_text(raw_lines[index - 1]).strip(" |:;") if index > table_start + 1 else ""
+                if previous and not re.search(r"\b\d{5,6}\b", previous) and len(re.findall(r"\d+(?:[,.]\d+)?", previous)) >= 1:
+                    current.append(previous)
+                current.append(line)
+                continue
+            if current:
+                if cls._looks_like_line_candidate(line) or len(re.findall(r"\d+(?:[,.]\d+)?", line)) >= 2:
+                    current.append(line)
+        if current:
+            segments.append(current)
+
+        extracted_lines: list[ExtractedInvoiceLine] = []
+        structured_rows: list[dict] = []
+        seen_codes: set[str] = set()
+        for segment in segments:
+            chunk = " ".join(segment)
+            code_match = re.search(r"\b(\d{5,6})\b", chunk)
+            code_article = code_match.group(1) if code_match else None
+            if code_article and code_article in seen_codes:
+                continue
+            if code_article:
+                seen_codes.add(code_article)
+            designation = cls._extract_transgourmet_designation(chunk, code_article)
+            if not designation:
+                continue
+            amounts = list(re.finditer(r"\d+(?:[,.]\d{1,4})?", chunk))
+            qty_match = re.search(r"\b(\d+(?:[,.]\d{1,3})?)\s*(LT|KG|BRI|BD|SHT|PCS|U|PIECE|UNITE|UNITÉ)\b", chunk, re.IGNORECASE)
+            unit = cls._normalize_unit(qty_match.group(2) if qty_match else None)
+            quantity = cls._to_decimal(qty_match.group(1), Decimal("1")) if qty_match else Decimal("1")
+            unit_price = cls._to_decimal(amounts[-2].group(), Decimal("0")) if len(amounts) >= 2 else Decimal("0")
+            total = cls._to_decimal(amounts[-1].group(), Decimal("0")) if amounts else Decimal("0")
+            confidence = Decimal("0.7800")
+            if code_article:
+                confidence += Decimal("0.0500")
+            if qty_match:
+                confidence += Decimal("0.0500")
+            if unit_price > 0 and total > 0:
+                confidence += Decimal("0.0500")
+            confidence = min(confidence, Decimal("0.9800"))
+            structured_rows.append(
+                {
+                    "code_article": code_article,
+                    "designation": designation,
+                    "unit": unit,
+                    "quantity": str(quantity),
+                    "unit_price": str(unit_price),
+                    "amount_ht": str(total),
+                    "confidence": str(confidence),
+                    "raw": segment,
+                }
+            )
+            extracted_lines.append(
+                ExtractedInvoiceLine(
+                    label=f"{code_article} {designation}".strip(),
+                    quantity=quantity,
+                    unit=unit,
+                    unit_price=unit_price,
+                    total=total,
+                    tax_rate=Decimal("0"),
+                    confidence=confidence,
+                )
+            )
+
+        return extracted_lines[:200], structured_rows[:200]
+
+    @staticmethod
+    def _extract_transgourmet_designation(chunk: str, code_article: str | None) -> str:
+        cleaned = chunk
+        if code_article:
+            cleaned = re.sub(rf"\b{re.escape(code_article)}\b", " ", cleaned, count=1)
+        cleaned = re.sub(r"\b\d+(?:[,.]\d{1,4})?\b", " ", cleaned)
+        cleaned = re.sub(r"\b(LT|KG|BRI|BD|SHT|PCS|U|PIECE|UNITE|UNITÉ)\b", " ", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"[|_=<>]", " ", cleaned)
+        cleaned = re.sub(r"^(?:code article|désignation|designation|marque|gtin)\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" -:;")
+        label = InvoiceOcrService._sanitize_line_label(cleaned)
+        transgourmet_tokens = {
+            "lat": "lait",
+            "lait": "lait",
+            "oreue": "creme",
+            "creme": "creme",
+            "doeuf": "oeuf",
+            "oeuf": "oeuf",
+            "oure": "cure",
+            "nantais": "nantais",
+            "melange": "melange",
+            "jeune": "jeune",
+            "pousse": "pousse",
+            "gat": "cat1",
+            "cat1": "cat1",
+            "aneth": "aneth",
+            "flow": "flow",
+            "pack": "pack",
+            "fr": "fr",
+        }
+        noise_tokens = {
+            "oso",
+            "meee",
+            "mating",
+            "anuanmic",
+            "jsreorsersoaeol",
+            "ovvo",
+            "lae",
+            "ae",
+            "ees",
+            "eS",
+            "tl",
+            "ean",
+            "wo",
+            "woe",
+            "wa",
+            "wace",
+            "rae",
+        }
+        normalized_tokens = []
+        for token in label.split():
+            lower = token.lower().strip("[](){}")
+            mapped = transgourmet_tokens.get(lower)
+            if mapped:
+                normalized_tokens.append(mapped)
+            elif lower not in noise_tokens and len(re.sub(r"[^A-Za-zÀ-ÿ]", "", token)) >= 3:
+                normalized_tokens.append(token)
+        return " ".join(normalized_tokens).strip()[:180]
+
+    @staticmethod
+    def _normalize_unit(value: str | None) -> str:
+        if not value:
+            return "piece"
+        normalized = value.upper().replace("UNITÉ", "U").replace("UNITE", "U")
+        if normalized in {"PCS", "PIECE", "U"}:
+            return "piece"
+        return normalized.lower()
