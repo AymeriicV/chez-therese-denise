@@ -1,6 +1,5 @@
-import { ModulePage } from "@/components/modules/module-page";
-import { getModuleByHref } from "@/lib/modules";
+import { ProductionClient } from "./production-client";
 
 export default function Page() {
-  return <ModulePage module={getModuleByHref("/production")!} />;
+  return <ProductionClient />;
 }

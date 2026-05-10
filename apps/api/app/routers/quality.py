@@ -561,6 +561,11 @@ async def _label_source_defaults(source_type: str, source_id: str | None, restau
         if not recipe:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fiche technique introuvable")
         return {"item_name": recipe.name, "allergens": recipe.allergens, "storage_area": None}
+    if source_type == "PRODUCTION" and source_id:
+        batch = await db.productionbatch.find_first(where={"id": source_id, "restaurantId": restaurant_id, "isArchived": False})
+        if not batch:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lot de production introuvable")
+        return {"item_name": batch.recipeName, "allergens": batch.allergens, "storage_area": batch.storageArea}
     return {}
 
 

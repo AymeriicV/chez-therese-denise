@@ -79,6 +79,7 @@ model Restaurant {
   inventorySessions   InventoryCountSession[]
   recipes             Recipe[]
   subRecipes          SubRecipe[]
+  productionBatches   ProductionBatch[]
   temperatureLogs     TemperatureLog[]
   temperatureEquipment TemperatureEquipment[]
   haccpTasks          HaccpTask[]
@@ -186,6 +187,7 @@ model InventoryItem {
   countLines     InventoryCountLine[]
   recipeIngredients RecipeIngredient[]
   subRecipeIngredients SubRecipeIngredient[]
+  productionConsumptions ProductionConsumption[]
 }
 
 model StockMovement {
@@ -247,6 +249,7 @@ model Recipe {
   updatedAt      DateTime           @updatedAt
   restaurant     Restaurant         @relation(fields: [restaurantId], references: [id])
   ingredients    RecipeIngredient[]
+  productionBatches ProductionBatch[]
 }
 
 model SubRecipe {
@@ -386,6 +389,7 @@ model HaccpTaskValidation {
 model FoodLabel {
   id           String     @id @default(uuid())
   restaurantId String
+  productionBatchId String?
   title        String
   itemName     String
   batchNumber  String?
@@ -406,6 +410,52 @@ model FoodLabel {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  productionBatch ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: SetNull)
+}
+
+model ProductionBatch {
+  id           String     @id @default(uuid())
+  restaurantId String
+  recipeId     String
+  lotNumber    String
+  recipeName   String
+  quantityProduced Decimal @db.Decimal(12, 3)
+  unit         String     @default("portion")
+  preparedAt   DateTime
+  expiresAt    DateTime
+  shelfLifeHours Int      @default(72)
+  storageArea  String?
+  conservationTemperature String?
+  allergens    String[]   @default([])
+  totalIngredientCost Decimal @default(0) @db.Decimal(12, 2)
+  wasteQuantity Decimal   @default(0) @db.Decimal(12, 3)
+  wasteReason  String?
+  notes        String?
+  status       String     @default("ACTIVE")
+  isArchived   Boolean    @default(false)
+  archivedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  recipe       Recipe     @relation(fields: [recipeId], references: [id])
+  consumptions ProductionConsumption[]
+  labels       FoodLabel[]
+
+  @@unique([restaurantId, lotNumber])
+}
+
+model ProductionConsumption {
+  id           String     @id @default(uuid())
+  productionBatchId String
+  inventoryItemId String
+  ingredientName String
+  quantityConsumed Decimal @db.Decimal(12, 3)
+  unit         String
+  unitCostSnapshot Decimal @default(0) @db.Decimal(12, 4)
+  totalCost    Decimal    @default(0) @db.Decimal(12, 2)
+  createdAt    DateTime   @default(now())
+  batch        ProductionBatch @relation(fields: [productionBatchId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem  @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
 }
 
 model TimeClockLog {

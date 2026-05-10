@@ -34,6 +34,7 @@ Pour reprendre apres interruption:
 - [x] 13 - HACCP PMS, temperatures et etiquettes exploitables
 - [x] 14 - Configuration restaurant HACCP, equipements, planning temperatures et etiquettes
 - [x] 15 - Organisation Qualite / HACCP et recurrence journaliere reelle
+- [x] 16 - Production labo, tracabilite, DLC et etiquettes automatiques
 
 ## Modules cible
 
@@ -41,7 +42,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-Organize quality module and recurring HACCP schedules.
+Production labo, tracabilite et DLC automatiques.
 
 ## Commandes etape 02
 
@@ -337,3 +338,35 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - Recherche code `8 mai`: aucun resultat dans `apps/web` et `apps/api`.
 - API qualite authentifiee: planning temperatures du dimanche 10 mai 2026 retourne 4 releves `MIDI`, taches HACCP du 10 mai et du 11 mai distinctes sans etat partage.
 - Validation metier: `Sol` marque `DONE` le 10 mai 2026 puis relu en `DONE` apres refresh; le 11 mai 2026 reste genere en `TODO`.
+
+## Etape 16 - Details
+
+- Prisma: ajout des tables `ProductionBatch` et `ProductionConsumption`, plus lien direct `FoodLabel -> ProductionBatch`.
+- API: nouveau routeur `/api/v1/production` pour creer, lister, mettre a jour et archiver les lots de production.
+- API: creation d'une production depuis une fiche technique avec calcul automatique des consommations d'ingredients stock.
+- API: sorties stock automatiques via mouvements `PRODUCTION` sur les articles ingredients.
+- API: DLC automatique calculee depuis la date de production et la duree en heures.
+- API: generation automatique des etiquettes de lot avec source `PRODUCTION`, allergenes, zone de stockage, temperature de conservation et lot.
+- API: creation automatique d'une trace HACCP `Production labo` et audit logs associes.
+- Frontend: remplacement de la page `/production` generique par un vrai workflow mobile-first cuisine avec formulaire, previsualisation des consommations, DLC, pertes, etiquettes et historique.
+- Frontend: detail lot avec tracabilite ingredients, etiquettes generees, impression et archivage.
+- Frontend: page etiquettes alignee pour afficher les lots `PRODUCTION`.
+
+## Validation etape 16
+
+- `python3 -m compileall -q apps/api`: OK.
+- `git diff --check`: OK.
+- `docker compose run --rm api prisma generate --schema /app/packages/db/prisma/schema.prisma`: OK.
+- `docker compose run --rm api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma`: OK, migration `20260510195000_production_batches_traceability` appliquee.
+- `docker compose run --rm --no-deps web pnpm --filter @ctd/web build`: OK.
+- `docker compose up --build -d`: OK.
+- `docker compose ps`: `ctd-api`, `ctd-web`, `ctd-postgres` UP.
+- `curl http://localhost:8000/health`: OK.
+- `curl -I http://localhost:3000/production`: HTTP 200.
+- Test metier reel:
+- Fiche `Cote de boeuf` enrichie avec ingredient stock `Lieu noir`.
+- Production creee: lot `COTEDE-20260510-1854` attendu en generation ASCII future, quantite `4` portions, DLC `13/05/2026 18:54`.
+- Sortie stock auto validee: `Lieu noir` passe de `11 kg` a `9 kg`, `movement_count` de `22` a `23`.
+- Etiquette auto validee: 1 etiquette generee pour le lot avec DLC identique.
+- Tracabilite validee: consommation `Lieu noir`, `2 kg`, visible dans le lot de production.
+- Historique HACCP valide: tache de categorie `Production labo` creee pour le lot de test.

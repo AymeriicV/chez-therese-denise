@@ -24,7 +24,7 @@ type FoodLabel = {
   allergens: string[];
   notes: string | null;
   status: "ACTIVE" | "PRINTED" | "EXPIRED";
-  source_type: "STOCK" | "RECIPE" | "FREE";
+  source_type: "STOCK" | "RECIPE" | "FREE" | "PRODUCTION";
   source_id: string | null;
   expiry_kind: "DLC" | "DDM";
   is_archived: boolean;
@@ -33,7 +33,7 @@ type FoodLabel = {
 type SourceItem = { id: string; name: string; unit?: string; allergens: string[]; storage_area?: string | null };
 type Sources = { stock: SourceItem[]; recipes: SourceItem[] };
 type FormState = {
-  source_type: "STOCK" | "RECIPE" | "FREE";
+  source_type: "STOCK" | "RECIPE" | "FREE" | "PRODUCTION";
   source_id: string;
   title: string;
   item_name: string;
@@ -333,7 +333,7 @@ export function LabelsClient() {
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted"><Tags className="h-4 w-4" /></div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{label.title}</p>
-                      <p className="truncate text-xs text-foreground/55">{label.item_name} - {label.source_type === "STOCK" ? "stock" : label.source_type === "RECIPE" ? "fiche technique" : "libre"}</p>
+                      <p className="truncate text-xs text-foreground/55">{label.item_name} - {label.source_type === "STOCK" ? "stock" : label.source_type === "RECIPE" ? "fiche technique" : label.source_type === "PRODUCTION" ? "production" : "libre"}</p>
                     </div>
                   </button>
                   <p className="text-sm text-foreground/70">{label.expiry_kind} {new Date(label.expires_at).toLocaleDateString("fr-FR")}</p>
@@ -354,7 +354,7 @@ export function LabelsClient() {
                 <p className="text-xs uppercase text-foreground/55">Aperçu imprimable</p>
                 <h2 className="mt-2 text-2xl font-semibold">{selected.item_name}</h2>
                 <div className="mt-4 grid gap-2 text-sm">
-                  <Line label="Type" value={selected.source_type === "STOCK" ? "Article stock" : selected.source_type === "RECIPE" ? "Fiche technique" : "Préparation libre"} />
+                  <Line label="Type" value={selected.source_type === "STOCK" ? "Article stock" : selected.source_type === "RECIPE" ? "Fiche technique" : selected.source_type === "PRODUCTION" ? "Lot de production" : "Préparation libre"} />
                   <Line label="Fabrication" value={new Date(selected.prepared_at).toLocaleString("fr-FR")} />
                   <Line label={selected.expiry_kind} value={new Date(selected.expires_at).toLocaleString("fr-FR")} />
                   <Line label="Lot" value={selected.batch_number || "-"} />

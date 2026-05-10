@@ -218,7 +218,7 @@ class HaccpTaskValidationCreate(BaseModel):
 class FoodLabelCreate(BaseModel):
     title: str = Field(min_length=2, max_length=180)
     item_name: str = Field(min_length=2, max_length=180)
-    source_type: Literal["STOCK", "RECIPE", "FREE"] = "FREE"
+    source_type: Literal["STOCK", "RECIPE", "FREE", "PRODUCTION"] = "FREE"
     source_id: str | None = None
     expiry_kind: Literal["DLC", "DDM"] = "DLC"
     batch_number: str | None = None
@@ -235,7 +235,7 @@ class FoodLabelCreate(BaseModel):
 class FoodLabelUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=2, max_length=180)
     item_name: str | None = Field(default=None, min_length=2, max_length=180)
-    source_type: Literal["STOCK", "RECIPE", "FREE"] | None = None
+    source_type: Literal["STOCK", "RECIPE", "FREE", "PRODUCTION"] | None = None
     source_id: str | None = None
     expiry_kind: Literal["DLC", "DDM"] | None = None
     batch_number: str | None = None
@@ -248,6 +248,27 @@ class FoodLabelUpdate(BaseModel):
     allergens: list[str] | None = None
     notes: str | None = None
     status: Literal["ACTIVE", "PRINTED", "EXPIRED"] | None = None
+
+
+class ProductionCreate(BaseModel):
+    recipe_id: str
+    quantity_produced: Decimal = Field(gt=0)
+    produced_at: datetime | None = None
+    shelf_life_hours: int = Field(default=72, ge=1, le=720)
+    label_count: int = Field(default=1, ge=1, le=50)
+    lot_number: str | None = Field(default=None, min_length=2, max_length=80)
+    storage_area: str | None = None
+    conservation_temperature: str | None = None
+    waste_quantity: Decimal = Field(default=Decimal("0"), ge=0)
+    waste_reason: str | None = None
+    notes: str | None = None
+
+
+class ProductionUpdate(BaseModel):
+    waste_quantity: Decimal | None = Field(default=None, ge=0)
+    waste_reason: str | None = None
+    notes: str | None = None
+    status: Literal["ACTIVE", "ARCHIVED"] | None = None
 
 
 class InvoiceLineOut(BaseModel):

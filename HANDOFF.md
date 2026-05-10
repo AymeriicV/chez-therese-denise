@@ -38,6 +38,8 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Topbar corrigee: plus de date mockee `8 mai`, date reelle du client affichee.
 - `/haccp`: taches du jour par date, historique des jours precedents, validation persistante de `Sol` testee.
 - `/temperatures`: affiche uniquement les prises attendues pour la date choisie, sinon message `Aucune prise de temperature prevue aujourd'hui`.
+- Module `/production` livre: creation de lot depuis fiche technique, quantite produite, DLC automatique, etiquettes auto, sorties stock automatiques, pertes, archivage, impression et tracabilite ingredient.
+- Liaison forte production/stock/recettes/etiquettes/HACCP: un lot cree des consommations stock, une etiquette `PRODUCTION` et une tache HACCP `Production labo`.
 
 ## Validation realisee
 
@@ -53,7 +55,8 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - API qualite testee: temperatures, taches HACCP, etiquettes, summary et archivage.
 - API qualite restaurant testee: planning mercredi midi, releve conforme armoire refrigeree, releve non conforme congelateur avec action corrective, validation Sol, creation etiquette depuis fiche technique, creation etiquette libre, impression etiquette.
 - API qualite recurrente testee: planning temperatures du dimanche 10 mai 2026, taches HACCP du 10 mai et du 11 mai distinctes, `Sol` reste `DONE` au refresh du 10 mai et revient `TODO` le 11 mai.
+- API production testee: ingredient `Lieu noir` ajoute a la fiche `Cote de boeuf`, production de `4` portions creee, stock `Lieu noir` de `11 kg` a `9 kg`, DLC auto au `13/05/2026 18:54`, etiquette auto et trace HACCP `Production labo`.
 
 ## Prochaine reprise
 
-Continuer avec production labo et commandes fournisseurs, ou reprendre sous-recettes avancees, couts matieres, marges et allergenes consolides. Garder la meme regle: aucun bouton decoratif, mutations branchees API, erreurs visibles et state UI mis a jour depuis les reponses backend.
+Continuer avec commandes fournisseurs, ou reprendre sous-recettes avancees, couts matieres, marges et allergenes consolides. Garder la meme regle: aucun bouton decoratif, mutations branchees API, erreurs visibles et state UI mis a jour depuis les reponses backend.
