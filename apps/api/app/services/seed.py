@@ -3,6 +3,7 @@ from decimal import Decimal
 from app.core.config import Settings
 from app.core.security import hash_password
 from app.db.prisma import db
+from app.routers.quality import ensure_restaurant_quality_defaults
 from app.services.allergens import detect_allergens, merge_allergens
 
 
@@ -52,6 +53,7 @@ async def seed_local_admin(settings: Settings) -> None:
         restaurant_ids.update(membership.restaurantId for membership in user_with_memberships.memberships)
     for restaurant_id in restaurant_ids:
         await _seed_lieu_noir(restaurant_id)
+        await ensure_restaurant_quality_defaults(restaurant_id)
 
 
 async def _seed_lieu_noir(restaurant_id: str) -> None:

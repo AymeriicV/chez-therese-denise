@@ -13,7 +13,7 @@ type HaccpTask = {
   id: string;
   title: string;
   category: string;
-  frequency: "DAILY" | "WEEKLY" | "MONTHLY" | "ON_DEMAND";
+  frequency: "DAILY" | "WEEKLY" | "MONTHLY" | "AFTER_SERVICE" | "ON_DEMAND";
   status: "TODO" | "DONE" | "NON_COMPLIANT";
   due_at: string | null;
   completed_at: string | null;
@@ -21,6 +21,14 @@ type HaccpTask = {
   corrective_action: string | null;
   notes: string | null;
   is_archived: boolean;
+  validations: Array<{
+    id: string;
+    responsible: string;
+    completed_at: string;
+    comment: string | null;
+    corrective_action: string | null;
+    status: "DONE" | "NON_COMPLIANT";
+  }>;
 };
 
 type FormState = {
@@ -32,7 +40,7 @@ type FormState = {
 };
 
 const emptyForm: FormState = { title: "", category: "Nettoyage", frequency: "DAILY", due_at: "", notes: "" };
-const frequencyLabels = { DAILY: "Quotidien", WEEKLY: "Hebdomadaire", MONTHLY: "Mensuel", ON_DEMAND: "À la demande" };
+const frequencyLabels = { DAILY: "Quotidien", WEEKLY: "Hebdomadaire", MONTHLY: "Mensuel", AFTER_SERVICE: "Après service", ON_DEMAND: "À la demande" };
 const statusLabels = { TODO: "À faire", DONE: "Fait", NON_COMPLIANT: "Non conforme" };
 
 export function HaccpClient() {
@@ -45,6 +53,8 @@ export function HaccpClient() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [responsible, setResponsible] = useState("Aymeric Admin");
+  const [comment, setComment] = useState("");
 
   const selected = tasks.find((task) => task.id === selectedId) ?? tasks[0] ?? null;
   const activeTasks = useMemo(() => tasks.filter((task) => !task.is_archived), [tasks]);
@@ -118,7 +128,7 @@ export function HaccpClient() {
     }
   }
 
-  async function updateStatus(task: HaccpTask, status: HaccpTask["status"]) {
+  async function updateStatus(task: HaccpTask, status: "DONE" | "NON_COMPLIANT") {
     setSaving(true);
     setError("");
     setSuccess("");
@@ -128,13 +138,24 @@ export function HaccpClient() {
       setError("Une action corrective est obligatoire pour une non-conformité.");
       return;
     }
+    if (!responsible.trim()) {
+      setSaving(false);
+      setError("Le responsable est obligatoire.");
+      return;
+    }
     try {
-      const updated = await apiRequest<HaccpTask>(`/quality/haccp/tasks/${task.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status, corrective_action: correctiveAction }),
+      const updated = await apiRequest<HaccpTask>(`/quality/haccp/tasks/${task.id}/validations`, {
+        method: "POST",
+        body: JSON.stringify({
+          status,
+          responsible: responsible.trim(),
+          comment: comment || null,
+          corrective_action: correctiveAction,
+        }),
       });
       setTasks((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
       setSelectedId(updated.id);
+      setComment("");
       setSuccess(status === "DONE" ? "Contrôle validé." : "Non-conformité enregistrée.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Mise à jour impossible");
@@ -184,6 +205,14 @@ export function HaccpClient() {
           <Metric label="Non conformes" value={String(activeTasks.filter((task) => task.status === "NON_COMPLIANT").length)} />
         </section>
 
+        <Card className="p-4">
+          <h2 className="text-base font-semibold">Validation nettoyage</h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-[180px_1fr]">
+            <Input label="Responsable" value={responsible} onChange={setResponsible} />
+            <Input label="Commentaire de réalisation" value={comment} onChange={setComment} />
+          </div>
+        </Card>
+
         {mode !== "idle" ? <Editor form={form} setForm={setForm} saving={saving} onCancel={() => setMode("idle")} onSave={saveTask} /> : null}
 
         <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -230,6 +259,17 @@ export function HaccpClient() {
                   <Metric label="Échéance" value={selected.due_at ? new Date(selected.due_at).toLocaleString("fr-FR") : "Non définie"} />
                 </div>
                 <p className="mt-4 rounded-md bg-muted px-3 py-3 text-sm text-foreground/65">{selected.corrective_action || selected.notes || "Aucune note."}</p>
+                <div className="mt-4 space-y-2">
+                  <h3 className="text-sm font-semibold">Historique des validations</h3>
+                  {selected.validations.length === 0 ? <p className="text-sm text-foreground/55">Aucune validation enregistrée.</p> : null}
+                  {selected.validations.slice(0, 6).map((validation) => (
+                    <div key={validation.id} className="rounded-md bg-muted px-3 py-2 text-sm">
+                      <p className="font-medium">{validation.responsible} - {validation.status === "DONE" ? "fait" : "non conforme"}</p>
+                      <p className="text-xs text-foreground/55">{new Date(validation.completed_at).toLocaleString("fr-FR")}</p>
+                      {validation.comment ? <p className="mt-1 text-xs">{validation.comment}</p> : null}
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : <p className="text-sm text-foreground/55">Sélectionnez un contrôle.</p>}
           </Card>

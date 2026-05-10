@@ -160,6 +160,9 @@ class SubRecipeUpdate(BaseModel):
 
 class TemperatureCreate(BaseModel):
     equipment: str = Field(min_length=2, max_length=160)
+    equipment_id: str | None = None
+    service: Literal["MIDI", "SOIR"] | None = None
+    check_date: datetime | None = None
     value_celsius: Decimal = Field(ge=-80, le=300)
     min_celsius: Decimal | None = Field(default=None, ge=-80, le=300)
     max_celsius: Decimal | None = Field(default=None, ge=-80, le=300)
@@ -171,6 +174,9 @@ class TemperatureCreate(BaseModel):
 
 class TemperatureUpdate(BaseModel):
     equipment: str | None = Field(default=None, min_length=2, max_length=160)
+    equipment_id: str | None = None
+    service: Literal["MIDI", "SOIR"] | None = None
+    check_date: datetime | None = None
     value_celsius: Decimal | None = Field(default=None, ge=-80, le=300)
     min_celsius: Decimal | None = Field(default=None, ge=-80, le=300)
     max_celsius: Decimal | None = Field(default=None, ge=-80, le=300)
@@ -183,15 +189,16 @@ class TemperatureUpdate(BaseModel):
 class HaccpTaskCreate(BaseModel):
     title: str = Field(min_length=2, max_length=180)
     category: str = Field(min_length=2, max_length=120)
-    frequency: Literal["DAILY", "WEEKLY", "MONTHLY", "ON_DEMAND"] = "DAILY"
+    frequency: Literal["DAILY", "WEEKLY", "MONTHLY", "AFTER_SERVICE", "ON_DEMAND"] = "DAILY"
     due_at: datetime | None = None
     notes: str | None = None
+    responsible: str | None = None
 
 
 class HaccpTaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=2, max_length=180)
     category: str | None = Field(default=None, min_length=2, max_length=120)
-    frequency: Literal["DAILY", "WEEKLY", "MONTHLY", "ON_DEMAND"] | None = None
+    frequency: Literal["DAILY", "WEEKLY", "MONTHLY", "AFTER_SERVICE", "ON_DEMAND"] | None = None
     status: Literal["TODO", "DONE", "NON_COMPLIANT"] | None = None
     due_at: datetime | None = None
     completed_at: datetime | None = None
@@ -200,15 +207,27 @@ class HaccpTaskUpdate(BaseModel):
     notes: str | None = None
 
 
+class HaccpTaskValidationCreate(BaseModel):
+    responsible: str = Field(min_length=2, max_length=160)
+    completed_at: datetime | None = None
+    comment: str | None = None
+    corrective_action: str | None = None
+    status: Literal["DONE", "NON_COMPLIANT"] = "DONE"
+
+
 class FoodLabelCreate(BaseModel):
     title: str = Field(min_length=2, max_length=180)
     item_name: str = Field(min_length=2, max_length=180)
+    source_type: Literal["STOCK", "RECIPE", "FREE"] = "FREE"
+    source_id: str | None = None
+    expiry_kind: Literal["DLC", "DDM"] = "DLC"
     batch_number: str | None = None
     quantity: Decimal | None = Field(default=None, ge=0)
     unit: str | None = None
     prepared_at: datetime
     expires_at: datetime
     storage_area: str | None = None
+    conservation_temperature: str | None = None
     allergens: list[str] = Field(default_factory=list)
     notes: str | None = None
 
@@ -216,12 +235,16 @@ class FoodLabelCreate(BaseModel):
 class FoodLabelUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=2, max_length=180)
     item_name: str | None = Field(default=None, min_length=2, max_length=180)
+    source_type: Literal["STOCK", "RECIPE", "FREE"] | None = None
+    source_id: str | None = None
+    expiry_kind: Literal["DLC", "DDM"] | None = None
     batch_number: str | None = None
     quantity: Decimal | None = Field(default=None, ge=0)
     unit: str | None = None
     prepared_at: datetime | None = None
     expires_at: datetime | None = None
     storage_area: str | None = None
+    conservation_temperature: str | None = None
     allergens: list[str] | None = None
     notes: str | None = None
     status: Literal["ACTIVE", "PRINTED", "EXPIRED"] | None = None

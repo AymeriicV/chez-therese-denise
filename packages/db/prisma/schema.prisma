@@ -80,6 +80,7 @@ model Restaurant {
   recipes             Recipe[]
   subRecipes          SubRecipe[]
   temperatureLogs     TemperatureLog[]
+  temperatureEquipment TemperatureEquipment[]
   haccpTasks          HaccpTask[]
   foodLabels          FoodLabel[]
   auditLogs           AuditLog[]
@@ -305,10 +306,14 @@ model SubRecipeIngredient {
 model TemperatureLog {
   id           String     @id @default(uuid())
   restaurantId String
+  equipmentId  String?
   equipment    String
+  equipmentType String?
   valueCelsius  Decimal    @db.Decimal(5, 2)
   minCelsius    Decimal?   @db.Decimal(5, 2)
   maxCelsius    Decimal?   @db.Decimal(5, 2)
+  service      String?
+  checkDate    DateTime?
   recordedAt   DateTime   @default(now())
   isCompliant  Boolean
   correctiveAction String?
@@ -318,6 +323,24 @@ model TemperatureLog {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  equipmentRef TemperatureEquipment? @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+}
+
+model TemperatureEquipment {
+  id           String     @id @default(uuid())
+  restaurantId String
+  name         String
+  type         String
+  minCelsius   Decimal?   @db.Decimal(5, 2)
+  maxCelsius   Decimal?   @db.Decimal(5, 2)
+  isActive     Boolean    @default(true)
+  archivedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  logs         TemperatureLog[]
+
+  @@unique([restaurantId, name])
 }
 
 model HaccpTask {
@@ -330,6 +353,7 @@ model HaccpTask {
   dueAt            DateTime?
   completedAt      DateTime?
   completedBy      String?
+  completedByUserId String?
   correctiveAction String?
   notes            String?
   isArchived       Boolean    @default(false)
@@ -337,6 +361,20 @@ model HaccpTask {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
   restaurant       Restaurant @relation(fields: [restaurantId], references: [id])
+  validations      HaccpTaskValidation[]
+}
+
+model HaccpTaskValidation {
+  id               String    @id @default(uuid())
+  taskId           String
+  userId           String?
+  responsible      String
+  completedAt      DateTime  @default(now())
+  comment          String?
+  correctiveAction String?
+  status           String    @default("DONE")
+  createdAt        DateTime  @default(now())
+  task             HaccpTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
 }
 
 model FoodLabel {
@@ -353,6 +391,10 @@ model FoodLabel {
   allergens    String[]   @default([])
   notes        String?
   status       String     @default("ACTIVE")
+  sourceType   String     @default("FREE")
+  sourceId     String?
+  expiryKind   String     @default("DLC")
+  conservationTemperature String?
   isArchived   Boolean    @default(false)
   archivedAt   DateTime?
   createdAt    DateTime   @default(now())

@@ -29,6 +29,10 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - UI principale traduite en francais sur les modules prioritaires.
 - Audit logs corriges pour Prisma Python regenere.
 - Modules HACCP/PMS, temperatures et etiquettes livres avec Prisma, API, UI FR, audit logs, validations, CRUD et archivage logique.
+- Configuration restaurant qualite ajoutee: equipements temperature reels, planning de releves attendu, taches de nettoyage seedees et etiquettes creees depuis stock, fiche technique ou preparation libre.
+- `/labels`: bouton `Creer une etiquette`, source stock/fiche/libre, champs DLC-DDM, lot, allergenes, zone, temperature de conservation, apercu imprimable, impression et archivage.
+- `/temperatures`: equipements `Armoire refrigeree`, `Timbre chaud`, `Timbre entree / dessert`, `Congelateur`, saisie rapide, conformite automatique, action corrective obligatoire si non conforme, historique par equipement.
+- `/haccp`: taches Sol, Plans de travail, Frigos, Hotte, Friteuse, Piano de cuisson, Four, Lave-main, Plonge, Machine a plonge, validation historisee avec responsable/commentaire et archivage.
 
 ## Validation realisee
 
@@ -42,6 +46,7 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Login `aymericvenacterpro@gmail.com / admin`: OK.
 - API testee: fournisseurs, stock, recettes, ingredients recettes, archivage.
 - API qualite testee: temperatures, taches HACCP, etiquettes, summary et archivage.
+- API qualite restaurant testee: planning mercredi midi, releve conforme armoire refrigeree, releve non conforme congelateur avec action corrective, validation Sol, creation etiquette depuis fiche technique, creation etiquette libre, impression etiquette.
 
 ## Prochaine reprise
 

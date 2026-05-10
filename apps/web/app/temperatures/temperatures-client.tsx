@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Archive, CheckCircle2, Loader2, Pencil, Plus, Save, Thermometer, X, XCircle } from "lucide-react";
+import { Archive, CheckCircle2, Loader2, Save, Thermometer, XCircle } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Topbar } from "@/components/shell/topbar";
 import { Button } from "@/components/ui/button";
@@ -9,62 +9,77 @@ import { Card } from "@/components/ui/card";
 import { apiRequest, authHint } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+type Equipment = { id: string; name: string; type: string; min_celsius: string | null; max_celsius: string | null; target: string };
 type TemperatureLog = {
   id: string;
+  equipment_id: string | null;
   equipment: string;
   value_celsius: string;
   min_celsius: string | null;
   max_celsius: string | null;
+  service: "MIDI" | "SOIR" | null;
+  check_date: string | null;
   recorded_at: string;
   is_compliant: boolean;
   corrective_action: string | null;
   note: string | null;
   is_archived: boolean;
 };
-
-type TemperatureForm = {
+type Slot = {
+  id: string;
+  equipment_id: string;
   equipment: string;
-  value_celsius: string;
-  min_celsius: string;
-  max_celsius: string;
-  corrective_action: string;
-  note: string;
+  equipment_type: string;
+  day: string;
+  date: string;
+  service: "MIDI" | "SOIR";
+  target: string;
+  status: "A_FAIRE" | "FAIT" | "EN_RETARD";
+  is_compliant: boolean | null;
 };
 
-const emptyForm: TemperatureForm = {
-  equipment: "",
-  value_celsius: "4",
-  min_celsius: "0",
-  max_celsius: "4",
-  corrective_action: "",
-  note: "",
-};
+type FormState = { equipment_id: string; value_celsius: string; service: "MIDI" | "SOIR"; check_date: string; corrective_action: string; note: string };
+const days = ["Tous", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
 export function TemperaturesClient() {
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [logs, setLogs] = useState<TemperatureLog[]>([]);
-  const [selectedId, setSelectedId] = useState("");
-  const [form, setForm] = useState<TemperatureForm>(emptyForm);
-  const [mode, setMode] = useState<"idle" | "create" | "edit">("idle");
-  const [showArchived, setShowArchived] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState("");
+  const [dayFilter, setDayFilter] = useState("Tous");
+  const [serviceFilter, setServiceFilter] = useState("Tous");
+  const [form, setForm] = useState<FormState>({ equipment_id: "", value_celsius: "", service: "MIDI", check_date: new Date().toISOString().slice(0, 10), corrective_action: "", note: "" });
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const selected = logs.find((log) => log.id === selectedId) ?? logs[0] ?? null;
-  const nonCompliant = useMemo(() => logs.filter((log) => !log.is_compliant && !log.is_archived), [logs]);
+  const selectedEquipment = equipment.find((item) => item.id === selectedEquipmentId) ?? equipment[0] ?? null;
+  const selectedHistory = logs.filter((log) => log.equipment_id === selectedEquipment?.id).slice(0, 8);
+  const visibleSlots = useMemo(
+    () => slots.filter((slot) => (dayFilter === "Tous" || slot.day === dayFilter) && (serviceFilter === "Tous" || slot.service === serviceFilter)),
+    [slots, dayFilter, serviceFilter],
+  );
 
   useEffect(() => {
-    void loadLogs();
-  }, [showArchived]);
+    void loadData();
+  }, []);
 
-  async function loadLogs(selectId?: string) {
+  async function loadData() {
     setLoading(true);
     setError("");
     try {
-      const data = await apiRequest<TemperatureLog[]>(`/quality/temperatures${showArchived ? "?include_archived=true" : ""}`);
-      setLogs(data);
-      setSelectedId(selectId ?? data[0]?.id ?? "");
+      const [equipmentData, logData, slotData] = await Promise.all([
+        apiRequest<Equipment[]>("/quality/temperature-equipment"),
+        apiRequest<TemperatureLog[]>("/quality/temperatures"),
+        apiRequest<Slot[]>("/quality/temperature-schedule"),
+      ]);
+      setEquipment(equipmentData);
+      setLogs(logData);
+      setSlots(slotData);
+      const first = equipmentData[0];
+      setSelectedEquipmentId((current) => current || first?.id || "");
+      setForm((current) => ({ ...current, equipment_id: current.equipment_id || first?.id || "" }));
     } catch (err) {
       setError(err instanceof Error ? err.message : authHint());
     } finally {
@@ -72,65 +87,58 @@ export function TemperaturesClient() {
     }
   }
 
-  function startCreate() {
-    setForm(emptyForm);
-    setMode("create");
+  function selectEquipment(item: Equipment) {
+    setSelectedEquipmentId(item.id);
+    setForm((current) => ({ ...current, equipment_id: item.id }));
     setSuccess("");
   }
 
-  function startEdit(log: TemperatureLog) {
-    setForm({
-      equipment: log.equipment,
-      value_celsius: String(log.value_celsius),
-      min_celsius: log.min_celsius ? String(log.min_celsius) : "",
-      max_celsius: log.max_celsius ? String(log.max_celsius) : "",
-      corrective_action: log.corrective_action ?? "",
-      note: log.note ?? "",
-    });
-    setSelectedId(log.id);
-    setMode("edit");
+  function startFromSlot(slot: Slot) {
+    setSelectedEquipmentId(slot.equipment_id);
+    setForm((current) => ({ ...current, equipment_id: slot.equipment_id, service: slot.service, check_date: slot.date }));
     setSuccess("");
   }
 
-  async function saveLog() {
+  function compliancePreview() {
+    const item = equipment.find((entry) => entry.id === form.equipment_id);
+    const value = Number(form.value_celsius);
+    if (!item || Number.isNaN(value)) return true;
+    if (item.min_celsius !== null && value < Number(item.min_celsius)) return false;
+    if (item.max_celsius !== null && value > Number(item.max_celsius)) return false;
+    return true;
+  }
+
+  async function saveTemperature() {
     setError("");
     setSuccess("");
-    if (!form.equipment.trim()) {
-      setError("L'équipement est obligatoire.");
+    if (!form.equipment_id || !form.value_celsius || Number.isNaN(Number(form.value_celsius))) {
+      setError("Sélectionnez un équipement et saisissez une température numérique.");
       return;
     }
-    for (const [label, value] of [["température", form.value_celsius], ["minimum", form.min_celsius], ["maximum", form.max_celsius]]) {
-      if (value && Number.isNaN(Number(value))) {
-        setError(`Le champ ${label} doit être numérique.`);
-        return;
-      }
-    }
-    if (form.min_celsius && form.max_celsius && Number(form.min_celsius) > Number(form.max_celsius)) {
-      setError("Le minimum doit être inférieur au maximum.");
+    if (!compliancePreview() && !form.corrective_action.trim()) {
+      setError("Action corrective obligatoire si la température est non conforme.");
       return;
     }
+    const item = equipment.find((entry) => entry.id === form.equipment_id);
+    if (!item) return;
     setSaving(true);
-    const payload = {
-      equipment: form.equipment.trim(),
-      value_celsius: form.value_celsius,
-      min_celsius: form.min_celsius || null,
-      max_celsius: form.max_celsius || null,
-      corrective_action: form.corrective_action || null,
-      note: form.note || null,
-    };
     try {
-      const isEdit = mode === "edit" && selected;
-      const saved = await apiRequest<TemperatureLog>(isEdit ? `/quality/temperatures/${selected.id}` : "/quality/temperatures", {
-        method: isEdit ? "PATCH" : "POST",
-        body: JSON.stringify(payload),
+      const saved = await apiRequest<TemperatureLog>("/quality/temperatures", {
+        method: "POST",
+        body: JSON.stringify({
+          equipment_id: item.id,
+          equipment: item.name,
+          value_celsius: form.value_celsius,
+          service: form.service,
+          check_date: new Date(`${form.check_date}T00:00:00`).toISOString(),
+          corrective_action: form.corrective_action || null,
+          note: form.note || null,
+        }),
       });
-      setLogs((current) => {
-        const exists = current.some((log) => log.id === saved.id);
-        return exists ? current.map((log) => (log.id === saved.id ? saved : log)) : [saved, ...current];
-      });
-      setSelectedId(saved.id);
-      setMode("idle");
-      setSuccess(saved.is_compliant ? "Relevé conforme enregistré." : "Relevé non conforme enregistré.");
+      setLogs((current) => [saved, ...current]);
+      setSuccess(saved.is_compliant ? "Température conforme enregistrée." : "Température non conforme enregistrée.");
+      setForm((current) => ({ ...current, value_celsius: "", corrective_action: "", note: "" }));
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sauvegarde impossible");
     } finally {
@@ -142,14 +150,9 @@ export function TemperaturesClient() {
     if (!window.confirm(`Archiver le relevé "${log.equipment}" ?`)) return;
     setSaving(true);
     setError("");
-    setSuccess("");
     try {
       const archived = await apiRequest<TemperatureLog>(`/quality/temperatures/${log.id}`, { method: "DELETE" });
-      setLogs((current) => {
-        const updated = current.map((entry) => (entry.id === archived.id ? archived : entry));
-        return showArchived ? updated : updated.filter((entry) => !entry.is_archived);
-      });
-      setSelectedId((current) => (current === archived.id ? "" : current));
+      setLogs((current) => current.map((entry) => entry.id === archived.id ? archived : entry).filter((entry) => !entry.is_archived));
       setSuccess("Relevé archivé.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Archivage impossible");
@@ -164,72 +167,89 @@ export function TemperaturesClient() {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 lg:px-8 lg:py-8">
         <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm text-foreground/55">Froid, chaud, conformité et actions correctives</p>
+            <p className="text-sm text-foreground/55">Équipements réels, planning HACCP et historique par équipement</p>
             <h1 className="mt-1 text-3xl font-semibold tracking-normal lg:text-5xl">Relevés températures</h1>
           </div>
-          <Button onClick={startCreate}><Plus className="h-4 w-4" />Relevé</Button>
         </section>
 
         {error ? <p className="rounded-md bg-muted px-3 py-2 text-sm">{error}</p> : null}
         {success ? <p className="rounded-md bg-foreground px-3 py-2 text-sm text-background">{success}</p> : null}
 
-        <section className="grid gap-3 sm:grid-cols-3">
-          <Metric label="Relevés" value={String(logs.filter((log) => !log.is_archived).length)} />
-          <Metric label="Non conformes" value={String(nonCompliant.length)} />
-          <Metric label="Conformité" value={`${logs.length ? Math.round(((logs.length - nonCompliant.length) / logs.length) * 100) : 100}%`} />
+        <section className="grid gap-3 md:grid-cols-4">
+          {equipment.map((item) => (
+            <button key={item.id} className={cn("rounded-md bg-muted p-4 text-left", selectedEquipment?.id === item.id && "bg-foreground text-background")} onClick={() => selectEquipment(item)}>
+              <p className="text-sm font-semibold">{item.name}</p>
+              <p className="mt-1 text-xs opacity-70">{item.type} - {item.target}</p>
+            </button>
+          ))}
         </section>
 
-        {mode !== "idle" ? <Editor form={form} setForm={setForm} saving={saving} onCancel={() => setMode("idle")} onSave={saveLog} /> : null}
+        <Card className="p-4">
+          <h2 className="text-base font-semibold">Saisie rapide</h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <label className="grid gap-1 text-sm lg:col-span-2">
+              <span className="text-xs text-foreground/55">Équipement</span>
+              <select className="h-10 rounded-md border border-border bg-background px-3" value={form.equipment_id} onChange={(event) => setForm({ ...form, equipment_id: event.target.value })}>
+                {equipment.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </label>
+            <Input label="Température °C" type="number" value={form.value_celsius} onChange={(value) => setForm({ ...form, value_celsius: value })} />
+            <label className="grid gap-1 text-sm">
+              <span className="text-xs text-foreground/55">Service</span>
+              <select className="h-10 rounded-md border border-border bg-background px-3" value={form.service} onChange={(event) => setForm({ ...form, service: event.target.value as "MIDI" | "SOIR" })}>
+                <option value="MIDI">Midi</option>
+                <option value="SOIR">Soir</option>
+              </select>
+            </label>
+            <Input label="Date" type="date" value={form.check_date} onChange={(value) => setForm({ ...form, check_date: value })} />
+            <Button className="self-end" onClick={saveTemperature} disabled={saving}><Save className="h-4 w-4" />Enregistrer</Button>
+          </div>
+          {!compliancePreview() ? <Input label="Action corrective obligatoire" value={form.corrective_action} onChange={(value) => setForm({ ...form, corrective_action: value })} /> : null}
+        </Card>
 
-        <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+        <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
           <Card className="overflow-hidden">
-            <div className="border-b border-border p-3">
-              <label className="flex items-center gap-2 text-xs text-foreground/60">
-                <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
-                Afficher les archivés
-              </label>
+            <div className="flex flex-wrap gap-2 border-b border-border p-3">
+              <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={dayFilter} onChange={(event) => setDayFilter(event.target.value)}>
+                {days.map((day) => <option key={day} value={day}>{day}</option>)}
+              </select>
+              <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}>
+                <option value="Tous">Tous services</option>
+                <option value="MIDI">Midi</option>
+                <option value="SOIR">Soir</option>
+              </select>
+              <span className="rounded-md bg-muted px-2 py-2 text-xs">Badge HACCP: {visibleSlots.every((slot) => slot.status === "FAIT" && slot.is_compliant !== false) ? "conforme" : "à suivre"}</span>
             </div>
             <div className="divide-y divide-border">
-              {loading ? <StateLine text="Chargement des relevés" /> : null}
-              {!loading && logs.length === 0 ? <StateLine text="Aucun relevé" loading={false} /> : null}
-              {logs.map((log) => (
-                <div key={log.id} className={cn("grid gap-3 px-4 py-4 sm:grid-cols-[1fr_120px_128px] sm:items-center", selected?.id === log.id && "bg-muted")}>
-                  <button className="flex min-w-0 gap-3 text-left" onClick={() => setSelectedId(log.id)}>
-                    <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted", !log.is_compliant && "bg-foreground text-background")}>
-                      {log.is_compliant ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{log.equipment}</p>
-                      <p className="truncate text-xs text-foreground/55">{new Date(log.recorded_at).toLocaleString("fr-FR")}</p>
-                    </div>
-                  </button>
-                  <p className="text-sm font-semibold">{Number(log.value_celsius).toFixed(1)} °C</p>
-                  <div className="flex gap-2 sm:justify-end">
-                    <Button variant="secondary" size="icon" aria-label="Modifier" disabled={saving || log.is_archived} onClick={() => startEdit(log)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="secondary" size="icon" aria-label="Archiver" disabled={saving || log.is_archived} onClick={() => archive(log)}><Archive className="h-4 w-4" /></Button>
+              {loading ? <StateLine text="Chargement du planning" /> : null}
+              {visibleSlots.map((slot) => (
+                <button key={slot.id} className="grid w-full gap-2 px-4 py-3 text-left sm:grid-cols-[1fr_110px_110px] sm:items-center" onClick={() => startFromSlot(slot)}>
+                  <div>
+                    <p className="text-sm font-medium">{slot.day} {slot.service === "MIDI" ? "midi" : "soir"} - {slot.equipment}</p>
+                    <p className="text-xs text-foreground/55">{slot.equipment_type} - {slot.target}</p>
                   </div>
-                </div>
+                  <span className={cn("rounded-md px-2 py-1 text-xs", slot.status === "FAIT" ? "bg-muted" : slot.status === "EN_RETARD" ? "bg-foreground text-background" : "bg-muted")}>{slot.status === "A_FAIRE" ? "À faire" : slot.status === "EN_RETARD" ? "En retard" : "Fait"}</span>
+                  <span className="text-xs text-foreground/55">{slot.is_compliant === null ? "" : slot.is_compliant ? "Conforme" : "Non conforme"}</span>
+                </button>
               ))}
             </div>
           </Card>
 
           <Card className="p-5">
-            {selected ? (
-              <>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted"><Thermometer className="h-4 w-4" /></div>
-                  <div>
-                    <h2 className="text-base font-semibold">{selected.equipment}</h2>
-                    <p className="text-sm text-foreground/55">{selected.is_compliant ? "Conforme" : "Non conforme"}</p>
+            <h2 className="text-base font-semibold">Historique {selectedEquipment?.name ?? ""}</h2>
+            <div className="mt-4 space-y-2">
+              {selectedHistory.length === 0 ? <p className="text-sm text-foreground/55">Aucun relevé pour cet équipement.</p> : null}
+              {selectedHistory.map((log) => (
+                <div key={log.id} className="flex items-center gap-3 rounded-md bg-muted px-3 py-3 text-sm">
+                  {log.is_compliant ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{Number(log.value_celsius).toFixed(1)} °C - {log.service ?? "hors planning"}</p>
+                    <p className="text-xs text-foreground/55">{new Date(log.recorded_at).toLocaleString("fr-FR")}</p>
                   </div>
+                  <Button variant="secondary" size="icon" aria-label="Archiver" disabled={saving} onClick={() => archive(log)}><Archive className="h-4 w-4" /></Button>
                 </div>
-                <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                  <Metric label="Température" value={`${Number(selected.value_celsius).toFixed(1)} °C`} />
-                  <Metric label="Plage cible" value={`${selected.min_celsius ?? "-"} / ${selected.max_celsius ?? "-"} °C`} />
-                </div>
-                <p className="mt-4 rounded-md bg-muted px-3 py-3 text-sm text-foreground/65">{selected.corrective_action || selected.note || "Aucune note."}</p>
-              </>
-            ) : <p className="text-sm text-foreground/55">Sélectionnez un relevé.</p>}
+              ))}
+            </div>
           </Card>
         </section>
       </div>
@@ -237,44 +257,8 @@ export function TemperaturesClient() {
   );
 }
 
-function Editor({ form, setForm, saving, onCancel, onSave }: { form: TemperatureForm; setForm: (form: TemperatureForm) => void; saving: boolean; onCancel: () => void; onSave: () => void }) {
-  function setField(field: keyof TemperatureForm, value: string) {
-    setForm({ ...form, [field]: value });
-  }
-  return (
-    <Card className="p-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        <Input label="Équipement" value={form.equipment} onChange={(value) => setField("equipment", value)} />
-        <Input label="Température °C" value={form.value_celsius} type="number" onChange={(value) => setField("value_celsius", value)} />
-        <Input label="Minimum °C" value={form.min_celsius} type="number" onChange={(value) => setField("min_celsius", value)} />
-        <Input label="Maximum °C" value={form.max_celsius} type="number" onChange={(value) => setField("max_celsius", value)} />
-        <Input label="Action corrective" value={form.corrective_action} onChange={(value) => setField("corrective_action", value)} />
-        <Input label="Note" value={form.note} onChange={(value) => setField("note", value)} />
-      </div>
-      <div className="mt-4 flex justify-end gap-2">
-        <Button variant="secondary" onClick={onCancel}><X className="h-4 w-4" />Annuler</Button>
-        <Button onClick={onSave} disabled={saving || !form.equipment}><Save className="h-4 w-4" />Enregistrer</Button>
-      </div>
-    </Card>
-  );
-}
-
 function Input({ label, value, type = "text", onChange }: { label: string; value: string; type?: string; onChange: (value: string) => void }) {
-  return (
-    <label className="grid gap-1 text-sm">
-      <span className="text-xs text-foreground/55">{label}</span>
-      <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" type={type} value={value} onChange={(event) => onChange(event.target.value)} />
-    </label>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md bg-muted px-3 py-3">
-      <p className="text-xs text-foreground/55">{label}</p>
-      <p className="mt-1 truncate text-base font-semibold">{value}</p>
-    </div>
-  );
+  return <label className="grid gap-1 text-sm"><span className="text-xs text-foreground/55">{label}</span><input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function StateLine({ text, loading = true }: { text: string; loading?: boolean }) {

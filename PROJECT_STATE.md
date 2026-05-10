@@ -32,6 +32,7 @@ Pour reprendre apres interruption:
 - [x] 11 - Durcissement bloc 1 suppliers, stock, invoices, inventory
 - [x] 12 - UI FR, allergenes automatiques, fiches techniques exploitables et archivage
 - [x] 13 - HACCP PMS, temperatures et etiquettes exploitables
+- [x] 14 - Configuration restaurant HACCP, equipements, planning temperatures et etiquettes
 
 ## Modules cible
 
@@ -39,7 +40,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-Add HACCP temperatures and labels workflows.
+Configure restaurant HACCP equipment labels and cleaning.
 
 ## Commandes etape 02
 
@@ -278,3 +279,29 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - `curl -I http://localhost:3000/temperatures`: HTTP 200.
 - `curl -I http://localhost:3000/labels`: HTTP 200.
 - Parcours API valide: creation/mise a jour/archivage temperature, creation/validation/archivage tache HACCP, creation/statut imprime/archivage etiquette.
+
+## Etape 14 - Details
+
+- Prisma: ajout des equipements de temperature, rattachement des releves aux equipements, source/type DLC-DDM des etiquettes et historique des validations HACCP.
+- API: seed automatique des equipements restaurant `Armoire refrigeree`, `Timbre chaud`, `Timbre entree / dessert` et `Congelateur` sans doublons.
+- API: planning automatique des prises de temperature mercredi midi/soir, jeudi midi/soir, vendredi midi/soir, samedi midi/soir et dimanche midi, avec statuts `A faire`, `Fait` et `En retard`.
+- API: conformite temperature calculee depuis les plages cible et action corrective obligatoire en cas de non-conformite.
+- API: seed automatique des taches de nettoyage Sol, Plans de travail, Frigos, Hotte, Friteuse, Piano de cuisson, Four, Lave-main, Plonge et Machine a plonge.
+- API: validations HACCP historisees avec responsable, commentaire, statut, action corrective et audit logs.
+- Frontend: page `/labels` clarifiee avec bouton `Creer une etiquette`, creation depuis stock, fiche technique ou preparation libre, apercu imprimable, impression et archivage.
+- Frontend: page `/temperatures` avec equipements reels, saisie rapide, planning attendu, filtres jour/service, badge conformite et historique par equipement.
+- Frontend: page `/haccp` avec taches de nettoyage seedees, validation faite/non conforme, responsable, commentaire, historique et archivage avec confirmation.
+
+## Validation etape 14
+
+- `python3 -m compileall -q apps/api`: OK.
+- `git diff --check`: OK.
+- `docker compose run --rm api prisma generate --schema /app/packages/db/prisma/schema.prisma`: OK.
+- `docker compose run --rm api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma`: OK, migration `20260510173000_restaurant_quality_config` appliquee.
+- `docker compose run --rm --no-deps web pnpm --filter @ctd/web build`: OK.
+- `docker compose up --build -d`: OK.
+- `curl -I http://localhost:3000/labels`: HTTP 200.
+- `curl -I http://localhost:3000/temperatures`: HTTP 200.
+- `curl -I http://localhost:3000/haccp`: HTTP 200.
+- Login local `aymericvenacterpro@gmail.com / admin`: OK.
+- API validee avec JWT et `X-Restaurant-Id`: equipements temperatures, planning mercredi midi, releve conforme armoire refrigeree, releve non conforme congelateur avec action corrective, taches nettoyage, validation Sol, archivage tache, creation etiquette depuis fiche technique, creation etiquette libre et impression.
