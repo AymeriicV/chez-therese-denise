@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn } from "lucide-react";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, decodeTokenPayload } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -26,8 +26,8 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       window.localStorage.setItem("ctd_token", response.access_token);
-      const payload = JSON.parse(window.atob(response.access_token.split(".")[1] ?? ""));
-      if (payload.restaurant_id) window.localStorage.setItem("ctd_restaurant_id", payload.restaurant_id);
+      const payload = decodeTokenPayload(response.access_token);
+      if (payload?.restaurant_id) window.localStorage.setItem("ctd_restaurant_id", payload.restaurant_id);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connexion impossible");

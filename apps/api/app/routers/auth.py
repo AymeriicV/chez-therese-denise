@@ -51,9 +51,13 @@ async def login(payload: LoginRequest):
 
 @router.get("/me", response_model=UserOut)
 async def me(current_user=Depends(get_current_user)):
+    user = await db.user.find_unique(where={"id": current_user.id}, include={"memberships": True})
+    membership = user.memberships[0] if user and user.memberships else None
     return UserOut(
-        id=current_user.id,
-        email=current_user.email,
-        first_name=current_user.firstName,
-        last_name=current_user.lastName,
+        id=user.id,
+        email=user.email,
+        first_name=user.firstName,
+        last_name=user.lastName,
+        role=membership.role if membership else None,
+        restaurant_id=membership.restaurantId if membership else None,
     )

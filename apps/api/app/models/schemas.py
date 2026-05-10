@@ -32,6 +32,55 @@ class UserOut(BaseModel):
     restaurant_id: str | None = None
 
 
+class EmployeeCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+    first_name: str = Field(min_length=2)
+    last_name: str = Field(min_length=2)
+    role: Literal["OWNER", "ADMIN", "MANAGER", "CHEF", "EMPLOYEE"] = "EMPLOYEE"
+    position: str = Field(min_length=2, max_length=120)
+    phone: str | None = None
+
+
+class EmployeeUpdate(BaseModel):
+    email: EmailStr | None = None
+    password: str | None = Field(default=None, min_length=8)
+    first_name: str | None = Field(default=None, min_length=2)
+    last_name: str | None = Field(default=None, min_length=2)
+    role: Literal["OWNER", "ADMIN", "MANAGER", "CHEF", "EMPLOYEE"] | None = None
+    position: str | None = Field(default=None, min_length=2, max_length=120)
+    phone: str | None = None
+    is_active: bool | None = None
+
+
+class ShiftCreate(BaseModel):
+    user_id: str
+    start_at: datetime
+    end_at: datetime
+    break_minutes: int = Field(default=0, ge=0, le=720)
+    position: str = Field(min_length=2, max_length=120)
+    comment: str | None = None
+
+
+class ShiftUpdate(BaseModel):
+    user_id: str | None = None
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    break_minutes: int | None = Field(default=None, ge=0, le=720)
+    position: str | None = Field(default=None, min_length=2, max_length=120)
+    comment: str | None = None
+    is_archived: bool | None = None
+
+
+class TimeClockCorrectionCreate(BaseModel):
+    entry_id: str | None = None
+    employee_id: str
+    clock_in: datetime | None = None
+    clock_out: datetime | None = None
+    reason: str = Field(min_length=3, max_length=500)
+    note: str | None = None
+
+
 class SupplierCreate(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     contact_name: str | None = None
@@ -269,6 +318,34 @@ class ProductionUpdate(BaseModel):
     waste_reason: str | None = None
     notes: str | None = None
     status: Literal["ACTIVE", "ARCHIVED"] | None = None
+
+
+class PurchaseOrderLineCreate(BaseModel):
+    inventory_item_id: str
+    quantity_ordered: Decimal = Field(gt=0)
+    unit_cost: Decimal | None = Field(default=None, ge=0)
+
+
+class PurchaseOrderCreate(BaseModel):
+    supplier_id: str
+    notes: str | None = None
+    lines: list[PurchaseOrderLineCreate] = Field(default_factory=list)
+
+
+class PurchaseOrderUpdate(BaseModel):
+    notes: str | None = None
+    status: Literal["DRAFT", "SENT", "RECEIVED", "ARCHIVED"] | None = None
+
+
+class PurchaseOrderLineUpdate(BaseModel):
+    line_id: str | None = None
+    quantity_ordered: Decimal | None = Field(default=None, gt=0)
+    quantity_received: Decimal | None = Field(default=None, ge=0)
+    unit_cost: Decimal | None = Field(default=None, ge=0)
+
+
+class PurchaseOrderReceive(BaseModel):
+    lines: list[PurchaseOrderLineUpdate] = Field(default_factory=list)
 
 
 class InvoiceLineOut(BaseModel):

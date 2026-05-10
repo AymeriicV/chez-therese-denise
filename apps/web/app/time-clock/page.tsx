@@ -1,6 +1,5 @@
-import { ModulePage } from "@/components/modules/module-page";
-import { getModuleByHref } from "@/lib/modules";
+import { TimeClockClient } from "./time-clock-client";
 
 export default function Page() {
-  return <ModulePage module={getModuleByHref("/time-clock")!} />;
+  return <TimeClockClient />;
 }

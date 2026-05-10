@@ -124,14 +124,14 @@ export const modules = [
     href: "/planning",
     title: "Planning employés",
     description: "Équipe, postes, absences, coût main d'oeuvre et publication mobile.",
-    status: "Navigation prête",
+    status: "Module actif",
     icon: CalendarDays,
   },
   {
     href: "/time-clock",
     title: "Badgeuse employés",
     description: "Pointage, pauses, validation manager et export paie.",
-    status: "Modèle de données prêt",
+    status: "Module actif",
     icon: Clock3,
   },
   {
@@ -215,7 +215,7 @@ export const modules = [
     href: "/team",
     title: "Multi-utilisateurs",
     description: "Invitations, rôles, permissions par restaurant et audit d'accès.",
-    status: "RBAC initial",
+    status: "Module actif",
     icon: Users,
   },
   {

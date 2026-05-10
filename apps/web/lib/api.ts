@@ -31,6 +31,30 @@ export function getStoredToken() {
   return window.localStorage.getItem("ctd_token");
 }
 
+export function decodeTokenPayload(token: string | null) {
+  if (!token) return null;
+  try {
+    const payload = token.split(".")[1] ?? "";
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(payload.length / 4) * 4, "=");
+    return JSON.parse(window.atob(base64));
+  } catch {
+    return null;
+  }
+}
+
+export function getSessionClaims() {
+  if (typeof window === "undefined") return null;
+  return decodeTokenPayload(getStoredToken());
+}
+
+export function getSessionRole() {
+  return getSessionClaims()?.role ?? null;
+}
+
+export function getSessionRestaurantId() {
+  return getSessionClaims()?.restaurant_id ?? null;
+}
+
 export function clearStoredSession() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem("ctd_token");
@@ -48,14 +72,7 @@ export function getStoredRestaurantId() {
   if (typeof window === "undefined") return null;
   const explicit = window.localStorage.getItem("ctd_restaurant_id");
   if (explicit) return explicit;
-  const token = getStoredToken();
-  if (!token) return null;
-  try {
-    const payload = JSON.parse(window.atob(token.split(".")[1] ?? ""));
-    return payload.restaurant_id ?? null;
-  } catch {
-    return null;
-  }
+  return getSessionRestaurantId();
 }
 
 export async function apiRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {

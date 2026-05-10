@@ -40,6 +40,11 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - `/temperatures`: affiche uniquement les prises attendues pour la date choisie, sinon message `Aucune prise de temperature prevue aujourd'hui`.
 - Module `/production` livre: creation de lot depuis fiche technique, quantite produite, DLC automatique, etiquettes auto, sorties stock automatiques, pertes, archivage, impression et tracabilite ingredient.
 - Liaison forte production/stock/recettes/etiquettes/HACCP: un lot cree des consommations stock, une etiquette `PRODUCTION` et une tache HACCP `Production labo`.
+- Module `/team` livre: creation, edition, archivage d'employes, roles, poste, telephone optionnel, compte personnel et audit logs.
+- Module `/planning` livre: vue semaine/jour, shifts affectes par employe, acces lecture employe, creation/modification OWNER et archivage.
+- Module `/time-clock` livre: pointage serveur entree/sortie pour employe, historique personnel, vue equipe pour OWNER, corrections auditables avec justification obligatoire.
+- Sidebar role-aware: l'EMPLOYEE voit seulement `Mon planning`, `Badgeuse` et `Quitter`; les modules admin sont masques et l'app redirige vers `/planning` si besoin.
+- Auth frontend: le role est decode depuis le JWT, `Authorization` et `X-Restaurant-Id` restent centralises dans `apiRequest`.
 
 ## Validation realisee
 
@@ -51,11 +56,18 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - `curl http://localhost:8000/health`: OK.
 - `curl -I http://localhost:3000/dashboard`: HTTP 200.
 - Login `aymericvenacterpro@gmail.com / admin`: OK.
+- Creation employe de test: OK.
+- Login employe de test: OK.
+- Planning employe filtre sur son planning uniquement: OK.
+- Badgeuse employe entree/sortie avec heure serveur: OK.
+- Correction OWNER sur pointage avec justification: OK.
+- Audit log correction `time_clock.corrected`: OK.
 - API testee: fournisseurs, stock, recettes, ingredients recettes, archivage.
 - API qualite testee: temperatures, taches HACCP, etiquettes, summary et archivage.
 - API qualite restaurant testee: planning mercredi midi, releve conforme armoire refrigeree, releve non conforme congelateur avec action corrective, validation Sol, creation etiquette depuis fiche technique, creation etiquette libre, impression etiquette.
 - API qualite recurrente testee: planning temperatures du dimanche 10 mai 2026, taches HACCP du 10 mai et du 11 mai distinctes, `Sol` reste `DONE` au refresh du 10 mai et revient `TODO` le 11 mai.
 - API production testee: ingredient `Lieu noir` ajoute a la fiche `Cote de boeuf`, production de `4` portions creee, stock `Lieu noir` de `11 kg` a `9 kg`, DLC auto au `13/05/2026 18:54`, etiquette auto et trace HACCP `Production labo`.
+- Pages `team`, `planning` et `time-clock` repondent `200` depuis le container Next avec fetch manuel.
 
 ## Prochaine reprise
 

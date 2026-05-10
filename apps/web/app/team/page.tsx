@@ -1,6 +1,5 @@
-import { ModulePage } from "@/components/modules/module-page";
-import { getModuleByHref } from "@/lib/modules";
+import { TeamClient } from "./team-client";
 
 export default function Page() {
-  return <ModulePage module={getModuleByHref("/team")!} />;
+  return <TeamClient />;
 }

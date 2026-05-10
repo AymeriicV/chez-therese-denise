@@ -1,6 +1,5 @@
-import { ModulePage } from "@/components/modules/module-page";
-import { getModuleByHref } from "@/lib/modules";
+import { OrdersClient } from "./orders-client";
 
 export default function Page() {
-  return <ModulePage module={getModuleByHref("/orders")!} />;
+  return <OrdersClient />;
 }

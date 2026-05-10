@@ -59,8 +59,12 @@ model User {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   memberships    RestaurantMember[]
+  employeeProfile EmployeeProfile?
+  shifts         Shift[]
   auditLogs      AuditLog[]
   timeClockLogs  TimeClockLog[]
+  timeClockCorrectionsMade TimeClockCorrectionLog[] @relation("TimeClockCorrectionByUser")
+  timeClockCorrectionsFor  TimeClockCorrectionLog[] @relation("TimeClockCorrectionEmployee")
 }
 
 model Restaurant {
@@ -74,6 +78,7 @@ model Restaurant {
   updatedAt           DateTime             @updatedAt
   members             RestaurantMember[]
   suppliers           Supplier[]
+  purchaseOrders      PurchaseOrder[]
   invoices            SupplierInvoice[]
   inventoryItems      InventoryItem[]
   inventorySessions   InventoryCountSession[]
@@ -87,6 +92,10 @@ model Restaurant {
   auditLogs           AuditLog[]
   notifications       Notification[]
   companySettings     CompanySettings?
+  employeeProfiles    EmployeeProfile[]
+  shifts              Shift[]
+  timeClockLogs       TimeClockLog[]
+  timeClockCorrections TimeClockCorrectionLog[]
 }
 
 model RestaurantMember {
@@ -119,6 +128,7 @@ model Supplier {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   restaurant   Restaurant        @relation(fields: [restaurantId], references: [id])
+  purchaseOrders PurchaseOrder[]
   invoices     SupplierInvoice[]
   inventoryItems InventoryItem[]
 }
@@ -188,6 +198,45 @@ model InventoryItem {
   recipeIngredients RecipeIngredient[]
   subRecipeIngredients SubRecipeIngredient[]
   productionConsumptions ProductionConsumption[]
+  purchaseOrderLines PurchaseOrderLine[]
+}
+
+model PurchaseOrder {
+  id           String     @id @default(uuid())
+  restaurantId String
+  supplierId   String
+  number       String
+  status       String     @default("DRAFT")
+  orderedAt    DateTime   @default(now())
+  sentAt       DateTime?
+  receivedAt   DateTime?
+  notes        String?
+  totalAmount  Decimal    @default(0) @db.Decimal(12, 2)
+  isArchived   Boolean    @default(false)
+  archivedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  supplier     Supplier   @relation(fields: [supplierId], references: [id])
+  lines        PurchaseOrderLine[]
+
+  @@unique([restaurantId, number])
+}
+
+model PurchaseOrderLine {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  inventoryItemId String
+  itemName        String
+  unit            String
+  quantityOrdered Decimal       @db.Decimal(12, 3)
+  quantityReceived Decimal      @default(0) @db.Decimal(12, 3)
+  unitCost        Decimal?      @db.Decimal(12, 4)
+  lineTotal       Decimal       @default(0) @db.Decimal(12, 2)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
 }
 
 model StockMovement {
@@ -459,12 +508,71 @@ model ProductionConsumption {
 }
 
 model TimeClockLog {
-  id        String   @id @default(uuid())
-  userId    String
-  clockIn   DateTime
-  clockOut  DateTime?
-  source    String   @default("web")
-  user      User     @relation(fields: [userId], references: [id])
+  id          String   @id @default(uuid())
+  restaurantId String
+  userId      String
+  clockIn     DateTime
+  clockOut    DateTime?
+  source      String   @default("web")
+  isArchived  Boolean  @default(false)
+  archivedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  restaurant  Restaurant @relation(fields: [restaurantId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+  corrections TimeClockCorrectionLog[]
+}
+
+model EmployeeProfile {
+  id           String     @id @default(uuid())
+  restaurantId String
+  userId       String     @unique
+  position     String
+  phone        String?
+  isActive     Boolean    @default(true)
+  archivedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  user         User       @relation(fields: [userId], references: [id])
+}
+
+model Shift {
+  id           String     @id @default(uuid())
+  restaurantId String
+  userId       String
+  startAt      DateTime
+  endAt        DateTime
+  breakMinutes Int        @default(0)
+  position     String
+  comment      String?
+  isArchived   Boolean    @default(false)
+  archivedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  user         User       @relation(fields: [userId], references: [id])
+
+  @@unique([restaurantId, userId, startAt])
+}
+
+model TimeClockCorrectionLog {
+  id               String     @id @default(uuid())
+  restaurantId     String
+  timeClockLogId   String?
+  employeeUserId   String
+  correctedByUserId String
+  reason           String
+  note             String?
+  originalClockIn  DateTime?
+  originalClockOut DateTime?
+  correctedClockIn DateTime?
+  correctedClockOut DateTime?
+  createdAt        DateTime   @default(now())
+  restaurant       Restaurant @relation(fields: [restaurantId], references: [id])
+  timeClockLog     TimeClockLog? @relation(fields: [timeClockLogId], references: [id], onDelete: SetNull)
+  employee         User       @relation("TimeClockCorrectionEmployee", fields: [employeeUserId], references: [id])
+  correctedBy      User       @relation("TimeClockCorrectionByUser", fields: [correctedByUserId], references: [id])
 }
 
 model Notification {

@@ -9,8 +9,10 @@ import {
   CalendarDays,
   ChefHat,
   ClipboardCheck,
+  Clock3,
   FileScan,
   Home,
+  LogOut,
   Moon,
   PackageCheck,
   Settings,
@@ -23,6 +25,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import { clearStoredSession, getSessionRole, redirectToLogin } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -49,6 +52,15 @@ const qualityItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const { setTheme, theme } = useTheme();
+  const role = getSessionRole();
+  const isEmployee = role === "EMPLOYEE";
+  const desktopItems = isEmployee ? employeeNavItems : navItems;
+  const mobileItems = isEmployee ? employeeNavItems : navItems.slice(0, 5);
+
+  function logout() {
+    clearStoredSession();
+    redirectToLogin();
+  }
 
   return (
     <>
@@ -63,7 +75,7 @@ export function Sidebar() {
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1">
-          {navItems.map((item) => {
+          {desktopItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
             const isQualityGroup = item.href === "/haccp";
@@ -106,22 +118,29 @@ export function Sidebar() {
           })}
         </nav>
         <div className="mt-4 flex items-center gap-2 border-t border-border pt-4">
-          <Button variant="secondary" size="icon" aria-label="Notifications">
-            <Bell className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="secondary"
-            size="icon"
-            aria-label="Mode sombre"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          >
-            <Moon className="h-4 w-4" />
+          {isEmployee ? null : (
+            <>
+              <Button variant="secondary" size="icon" aria-label="Notifications">
+                <Bell className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                aria-label="Mode sombre"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              >
+                <Moon className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+          <Button variant="secondary" size="icon" aria-label="Déconnexion" onClick={logout}>
+            <LogOut className="h-4 w-4" />
           </Button>
           <div className="ml-auto h-8 w-8 rounded-full bg-muted" />
         </div>
       </aside>
-      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-border bg-background/95 px-2 py-2 backdrop-blur lg:hidden">
-        {navItems.slice(0, 5).map((item) => {
+      <nav className={cn("fixed inset-x-0 bottom-0 z-20 grid border-t border-border bg-background/95 px-2 py-2 backdrop-blur lg:hidden", isEmployee ? "grid-cols-3" : "grid-cols-5")}>
+        {mobileItems.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.href;
           return (
@@ -138,7 +157,22 @@ export function Sidebar() {
             </Link>
           );
         })}
+        {isEmployee ? (
+          <button
+            type="button"
+            onClick={logout}
+            className="flex h-11 flex-col items-center justify-center gap-1 rounded-md text-[10px] text-foreground/60"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="max-w-full truncate">Quitter</span>
+          </button>
+        ) : null}
       </nav>
     </>
   );
 }
+
+const employeeNavItems = [
+  { href: "/planning", label: "Mon planning", icon: CalendarDays },
+  { href: "/time-clock", label: "Badgeuse", icon: Clock3 },
+];

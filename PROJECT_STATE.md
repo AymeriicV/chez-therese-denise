@@ -35,6 +35,7 @@ Pour reprendre apres interruption:
 - [x] 14 - Configuration restaurant HACCP, equipements, planning temperatures et etiquettes
 - [x] 15 - Organisation Qualite / HACCP et recurrence journaliere reelle
 - [x] 16 - Production labo, tracabilite, DLC et etiquettes automatiques
+- [x] 17 - Equipe, planning et badgeuse avec roles et acces limites
 
 ## Modules cible
 
@@ -42,7 +43,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-Production labo, tracabilite et DLC automatiques.
+Equipe, planning et badgeuse avec roles et acces limites.
 
 ## Commandes etape 02
 
@@ -218,6 +219,20 @@ Le seed ajoute aussi l'article stock local:
 - Categorie: `Poisson`
 - Unite: `kg`
 - SKU: `1`
+
+## Validation etape 17
+
+- `python3 -m compileall -q apps/api`: OK.
+- `git diff --check`: OK.
+- `docker compose run --rm api prisma generate --schema /app/packages/db/prisma/schema.prisma`: OK.
+- `docker compose run --rm api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma`: OK, migration `20260510199000_team_planning_timeclock` appliquee.
+- `docker compose run --rm --no-deps web pnpm --filter @ctd/web build`: OK.
+- `docker compose up --build -d`: OK.
+- `docker compose exec api curl -s http://localhost:8000/health`: OK.
+- `docker compose exec web node -e \"fetch('http://localhost:3000/planning',{redirect:'manual'})\"`: HTTP 200.
+- `docker compose exec web node -e \"fetch('http://localhost:3000/time-clock',{redirect:'manual'})\"`: HTTP 200.
+- `docker compose exec web node -e \"fetch('http://localhost:3000/team',{redirect:'manual'})\"`: HTTP 200.
+- API testee avec le compte OWNER local: creation employe, login employe, shift planning, pointage entree/sortie, correction OWNER et audit log.
 - Zone: `Chambre froide`
 - Quantite: `11`
 - Allergene detecte: `Poisson`
