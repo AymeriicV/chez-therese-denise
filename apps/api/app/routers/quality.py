@@ -1,5 +1,6 @@
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -33,12 +34,15 @@ TEMPERATURE_SLOTS = [
 
 @router.get("/summary")
 async def quality_summary(ctx=Depends(get_restaurant_context)):
+    await ensure_restaurant_quality_defaults(ctx["restaurant_id"])
+    today = (await _restaurant_now(ctx["restaurant_id"])).date()
+    await ensure_haccp_daily_tasks(ctx["restaurant_id"], today)
     temperatures = await db.temperaturelog.find_many(
         where={"restaurantId": ctx["restaurant_id"], "isArchived": False},
         order={"recordedAt": "desc"},
         take=200,
     )
-    tasks = await db.haccptask.find_many(where={"restaurantId": ctx["restaurant_id"], "isArchived": False})
+    tasks = await db.haccptask.find_many(where={"restaurantId": ctx["restaurant_id"], "isArchived": False, "scheduledForDate": _utc_day_start(today)})
     labels = await db.foodlabel.find_many(where={"restaurantId": ctx["restaurant_id"], "isArchived": False})
     now = datetime.now(UTC)
     return {
@@ -65,12 +69,13 @@ async def list_temperature_equipment(ctx=Depends(get_restaurant_context)):
 async def temperature_schedule(
     day: str | None = Query(None),
     service: str | None = Query(None),
+    target_date: date | None = Query(None),
     ctx=Depends(get_restaurant_context),
 ):
     await ensure_restaurant_quality_defaults(ctx["restaurant_id"])
+    restaurant_now = await _restaurant_now(ctx["restaurant_id"])
     equipment = await db.temperatureequipment.find_many(where={"restaurantId": ctx["restaurant_id"], "isActive": True})
-    now = datetime.now(UTC)
-    monday = (now - timedelta(days=now.weekday())).date()
+    monday = (restaurant_now - timedelta(days=restaurant_now.weekday())).date()
     start = datetime.combine(monday, time.min, UTC)
     end = start + timedelta(days=7)
     logs = await db.temperaturelog.find_many(
@@ -83,6 +88,8 @@ async def temperature_schedule(
     rows = []
     for weekday, slot_service in TEMPERATURE_SLOTS:
         slot_date = monday + timedelta(days=weekday)
+        if target_date and slot_date != target_date:
+            continue
         if day and day.upper() != _day_label(weekday).upper():
             continue
         if service and service.upper() != slot_service:
@@ -110,7 +117,7 @@ async def temperature_schedule(
                     "date": slot_date.isoformat(),
                     "service": slot_service,
                     "target": _target_label(item.minCelsius, item.maxCelsius),
-                    "status": "FAIT" if done_log else "EN_RETARD" if now > deadline else "A_FAIRE",
+                    "status": "FAIT" if done_log else "EN_RETARD" if restaurant_now.astimezone(UTC) > deadline else "A_FAIRE",
                     "is_compliant": done_log.isCompliant if done_log else None,
                     "temperature_log_id": done_log.id if done_log else None,
                 }
@@ -238,12 +245,25 @@ async def archive_temperature(
 
 
 @router.get("/haccp/tasks")
-async def list_haccp_tasks(include_archived: bool = Query(False), ctx=Depends(get_restaurant_context)):
+async def list_haccp_tasks(
+    include_archived: bool = Query(False),
+    target_date: date | None = Query(None),
+    scope: str = Query("today"),
+    ctx=Depends(get_restaurant_context),
+):
     await ensure_restaurant_quality_defaults(ctx["restaurant_id"])
+    reference_date = target_date or (await _restaurant_now(ctx["restaurant_id"])).date()
+    await ensure_haccp_daily_tasks(ctx["restaurant_id"], reference_date)
     where = {"restaurantId": ctx["restaurant_id"]}
     if not include_archived:
         where["isArchived"] = False
-    tasks = await db.haccptask.find_many(where=where, include={"validations": True}, order={"updatedAt": "desc"})
+    if scope == "today":
+        where["scheduledForDate"] = _utc_day_start(reference_date)
+    elif scope == "history":
+        where["scheduledForDate"] = {"lt": _utc_day_start(reference_date)}
+    elif scope == "upcoming":
+        where["scheduledForDate"] = {"gt": _utc_day_start(reference_date)}
+    tasks = await db.haccptask.find_many(where=where, include={"validations": True}, order=[{"scheduledForDate": "desc"}, {"title": "asc"}], take=120)
     return [_serialize_haccp_task(task) for task in tasks]
 
 
@@ -252,12 +272,15 @@ async def create_haccp_task(
     payload: HaccpTaskCreate,
     ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF")),
 ):
+    reference_date = payload.due_at.date() if payload.due_at else (await _restaurant_now(ctx["restaurant_id"])).date()
     task = await db.haccptask.create(
         data={
             "restaurantId": ctx["restaurant_id"],
             "title": payload.title,
             "category": payload.category,
             "frequency": payload.frequency,
+            "scheduledForDate": _utc_day_start(reference_date),
+            "isRecurring": False,
             "dueAt": payload.due_at,
             "notes": payload.notes,
             "completedBy": payload.responsible,
@@ -592,12 +615,18 @@ def _serialize_temperature(log):
 
 
 def _serialize_haccp_task(task):
+    display_status = "EN_RETARD" if task.status == "TODO" and task.dueAt and datetime.now(UTC) > task.dueAt else task.status
     return {
         "id": task.id,
         "title": task.title,
         "category": task.category,
         "frequency": task.frequency,
         "status": task.status,
+        "display_status": display_status,
+        "template_key": task.templateKey,
+        "scheduled_for_date": task.scheduledForDate,
+        "scheduled_service": task.scheduledService,
+        "is_recurring": task.isRecurring,
         "due_at": task.dueAt,
         "completed_at": task.completedAt,
         "completed_by": task.completedBy,
@@ -685,26 +714,113 @@ async def ensure_restaurant_quality_defaults(restaurant_id: str):
             await db.temperatureequipment.update(where={"id": existing.id}, data=data)
         else:
             await db.temperatureequipment.create(data={"restaurantId": restaurant_id, "name": name, **data})
+    await _archive_legacy_cleaning_defaults(restaurant_id)
 
-    cleaning_defaults = [
-        ("Sol", "AFTER_SERVICE"),
-        ("Plans de travail", "AFTER_SERVICE"),
-        ("Frigos", "DAILY"),
-        ("Hotte", "WEEKLY"),
-        ("Friteuse", "WEEKLY"),
-        ("Piano de cuisson", "AFTER_SERVICE"),
-        ("Four", "WEEKLY"),
-        ("Lave-main", "DAILY"),
-        ("Plonge", "AFTER_SERVICE"),
-        ("Machine à plonge", "DAILY"),
-    ]
-    for title, frequency in cleaning_defaults:
-        existing = await db.haccptask.find_first(where={"restaurantId": restaurant_id, "title": title, "category": "Nettoyage"})
-        data = {"frequency": frequency, "isArchived": False, "archivedAt": None}
-        if existing:
-            await db.haccptask.update(where={"id": existing.id}, data=data)
+
+async def ensure_haccp_daily_tasks(restaurant_id: str, target_date: date):
+    for task in _cleaning_occurrences_for_date(target_date):
+        exists = await db.haccptask.find_first(
+            where={
+                "restaurantId": restaurant_id,
+                "templateKey": task["template_key"],
+                "scheduledForDate": _utc_day_start(target_date),
+                "scheduledService": task["scheduled_service"],
+            }
+        )
+        data = {
+            "restaurantId": restaurant_id,
+            "title": task["title"],
+            "category": "Nettoyage",
+            "frequency": task["frequency"],
+            "templateKey": task["template_key"],
+            "scheduledForDate": _utc_day_start(target_date),
+            "scheduledService": task["scheduled_service"],
+            "isRecurring": True,
+            "dueAt": task["due_at"],
+        }
+        if exists:
+            await db.haccptask.update(
+                where={"id": exists.id},
+                data={
+                    "title": task["title"],
+                    "frequency": task["frequency"],
+                    "dueAt": task["due_at"],
+                    "isArchived": False,
+                    "archivedAt": None,
+                },
+            )
         else:
-            await db.haccptask.create(data={"restaurantId": restaurant_id, "title": title, "category": "Nettoyage", **data})
+            await db.haccptask.create(data=data)
+
+
+async def _archive_legacy_cleaning_defaults(restaurant_id: str):
+    legacy_tasks = await db.haccptask.find_many(
+        where={
+            "restaurantId": restaurant_id,
+            "category": "Nettoyage",
+            "scheduledForDate": None,
+            "templateKey": None,
+            "isArchived": False,
+            "title": {"in": [task["title"] for task in _cleaning_catalog()]},
+        }
+    )
+    for task in legacy_tasks:
+        await db.haccptask.update(
+            where={"id": task.id},
+            data={"isArchived": True, "archivedAt": datetime.now(UTC), "notes": "Archivé automatiquement après migration vers les tâches récurrentes"},
+        )
+
+
+def _cleaning_catalog():
+    return [
+        {"title": "Sol", "frequency": "DAILY", "due_hour": 18, "service": None, "weekday": None},
+        {"title": "Plans de travail", "frequency": "DAILY", "due_hour": 18, "service": None, "weekday": None},
+        {"title": "Frigos", "frequency": "DAILY", "due_hour": 18, "service": None, "weekday": None},
+        {"title": "Lave-main", "frequency": "DAILY", "due_hour": 18, "service": None, "weekday": None},
+        {"title": "Plonge", "frequency": "DAILY", "due_hour": 18, "service": None, "weekday": None},
+        {"title": "Machine à plonge", "frequency": "DAILY", "due_hour": 18, "service": None, "weekday": None},
+        {"title": "Friteuse", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MIDI", "weekday": None},
+        {"title": "Friteuse", "frequency": "AFTER_SERVICE", "due_hour": 23, "service": "SOIR", "weekday": None},
+        {"title": "Piano de cuisson", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MIDI", "weekday": None},
+        {"title": "Piano de cuisson", "frequency": "AFTER_SERVICE", "due_hour": 23, "service": "SOIR", "weekday": None},
+        {"title": "Four", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MIDI", "weekday": None},
+        {"title": "Four", "frequency": "AFTER_SERVICE", "due_hour": 23, "service": "SOIR", "weekday": None},
+        {"title": "Hotte", "frequency": "WEEKLY", "due_hour": 18, "service": None, "weekday": 6},
+    ]
+
+
+def _cleaning_occurrences_for_date(target_date: date):
+    occurrences = []
+    for rule in _cleaning_catalog():
+        if rule["frequency"] == "WEEKLY" and target_date.weekday() != rule["weekday"]:
+            continue
+        due_at = datetime.combine(target_date, time(rule["due_hour"], 0), UTC)
+        service_suffix = f" - service {rule['service'].lower()}" if rule["service"] else ""
+        template_service = rule["service"] or "DAY"
+        occurrences.append(
+            {
+                "title": f"{rule['title']}{service_suffix}",
+                "frequency": rule["frequency"],
+                "template_key": f"cleaning:{rule['title']}:{template_service}",
+                "scheduled_service": rule["service"],
+                "due_at": due_at,
+            }
+        )
+    return occurrences
+
+
+def _utc_day_start(target_date: date):
+    return datetime.combine(target_date, time.min, UTC)
+
+
+async def _restaurant_now(restaurant_id: str):
+    restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
+    tz_name = restaurant.timezone if restaurant and restaurant.timezone else "UTC"
+    try:
+        zone = ZoneInfo(tz_name)
+    except Exception:
+        zone = ZoneInfo("UTC")
+    return datetime.now(zone)
 
 
 async def _audit(ctx, action: str, entity: str, entity_id: str, metadata: dict | None = None):

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Archive, CheckCircle2, Loader2, Save, Thermometer, XCircle } from "lucide-react";
+import { Archive, CheckCircle2, Save, Thermometer, XCircle } from "lucide-react";
+import { QualityNav } from "@/components/quality/quality-nav";
 import { AppShell } from "@/components/shell/app-shell";
 import { Topbar } from "@/components/shell/topbar";
 import { Button } from "@/components/ui/button";
@@ -39,31 +40,35 @@ type Slot = {
 };
 
 type FormState = { equipment_id: string; value_celsius: string; service: "MIDI" | "SOIR"; check_date: string; corrective_action: string; note: string };
-const days = ["Tous", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+
+function todayInputValue() {
+  const now = new Date();
+  const offset = now.getTimezoneOffset();
+  return new Date(now.getTime() - offset * 60_000).toISOString().slice(0, 10);
+}
 
 export function TemperaturesClient() {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [logs, setLogs] = useState<TemperatureLog[]>([]);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState("");
-  const [dayFilter, setDayFilter] = useState("Tous");
-  const [serviceFilter, setServiceFilter] = useState("Tous");
-  const [form, setForm] = useState<FormState>({ equipment_id: "", value_celsius: "", service: "MIDI", check_date: new Date().toISOString().slice(0, 10), corrective_action: "", note: "" });
+  const [targetDate, setTargetDate] = useState(todayInputValue());
+  const [form, setForm] = useState<FormState>({ equipment_id: "", value_celsius: "", service: "MIDI", check_date: todayInputValue(), corrective_action: "", note: "" });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   const selectedEquipment = equipment.find((item) => item.id === selectedEquipmentId) ?? equipment[0] ?? null;
-  const selectedHistory = logs.filter((log) => log.equipment_id === selectedEquipment?.id).slice(0, 8);
-  const visibleSlots = useMemo(
-    () => slots.filter((slot) => (dayFilter === "Tous" || slot.day === dayFilter) && (serviceFilter === "Tous" || slot.service === serviceFilter)),
-    [slots, dayFilter, serviceFilter],
-  );
+  const selectedHistory = logs.filter((log) => log.equipment_id === selectedEquipment?.id).slice(0, 10);
+  const badgeText = useMemo(() => {
+    if (slots.length === 0) return "aucune prise prévue";
+    return slots.every((slot) => slot.status === "FAIT" && slot.is_compliant !== false) ? "conforme" : "à suivre";
+  }, [slots]);
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [targetDate]);
 
   async function loadData() {
     setLoading(true);
@@ -72,14 +77,14 @@ export function TemperaturesClient() {
       const [equipmentData, logData, slotData] = await Promise.all([
         apiRequest<Equipment[]>("/quality/temperature-equipment"),
         apiRequest<TemperatureLog[]>("/quality/temperatures"),
-        apiRequest<Slot[]>("/quality/temperature-schedule"),
+        apiRequest<Slot[]>(`/quality/temperature-schedule?target_date=${targetDate}`),
       ]);
       setEquipment(equipmentData);
       setLogs(logData);
       setSlots(slotData);
       const first = equipmentData[0];
       setSelectedEquipmentId((current) => current || first?.id || "");
-      setForm((current) => ({ ...current, equipment_id: current.equipment_id || first?.id || "" }));
+      setForm((current) => ({ ...current, equipment_id: current.equipment_id || first?.id || "", check_date: targetDate }));
     } catch (err) {
       setError(err instanceof Error ? err.message : authHint());
     } finally {
@@ -123,7 +128,7 @@ export function TemperaturesClient() {
     if (!item) return;
     setSaving(true);
     try {
-      const saved = await apiRequest<TemperatureLog>("/quality/temperatures", {
+      await apiRequest<TemperatureLog>("/quality/temperatures", {
         method: "POST",
         body: JSON.stringify({
           equipment_id: item.id,
@@ -135,8 +140,7 @@ export function TemperaturesClient() {
           note: form.note || null,
         }),
       });
-      setLogs((current) => [saved, ...current]);
-      setSuccess(saved.is_compliant ? "Température conforme enregistrée." : "Température non conforme enregistrée.");
+      setSuccess(compliancePreview() ? "Température conforme enregistrée." : "Température non conforme enregistrée.");
       setForm((current) => ({ ...current, value_celsius: "", corrective_action: "", note: "" }));
       await loadData();
     } catch (err) {
@@ -151,9 +155,9 @@ export function TemperaturesClient() {
     setSaving(true);
     setError("");
     try {
-      const archived = await apiRequest<TemperatureLog>(`/quality/temperatures/${log.id}`, { method: "DELETE" });
-      setLogs((current) => current.map((entry) => entry.id === archived.id ? archived : entry).filter((entry) => !entry.is_archived));
+      await apiRequest<TemperatureLog>(`/quality/temperatures/${log.id}`, { method: "DELETE" });
       setSuccess("Relevé archivé.");
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Archivage impossible");
     } finally {
@@ -165,12 +169,14 @@ export function TemperaturesClient() {
     <AppShell>
       <Topbar />
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 lg:px-8 lg:py-8">
-        <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <section className="flex flex-col gap-3">
           <div>
-            <p className="text-sm text-foreground/55">Équipements réels, planning HACCP et historique par équipement</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-normal lg:text-5xl">Relevés températures</h1>
+            <p className="text-sm text-foreground/55">Catégorie Températures du module Qualité / HACCP</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-normal lg:text-5xl">Températures</h1>
           </div>
         </section>
+
+        <QualityNav compact active="temperatures" />
 
         {error ? <p className="rounded-md bg-muted px-3 py-2 text-sm">{error}</p> : null}
         {success ? <p className="rounded-md bg-foreground px-3 py-2 text-sm text-background">{success}</p> : null}
@@ -201,28 +207,22 @@ export function TemperaturesClient() {
                 <option value="SOIR">Soir</option>
               </select>
             </label>
-            <Input label="Date" type="date" value={form.check_date} onChange={(value) => setForm({ ...form, check_date: value })} />
+            <Input label="Date" type="date" value={form.check_date} onChange={(value) => { setTargetDate(value); setForm({ ...form, check_date: value }); }} />
             <Button className="self-end" onClick={saveTemperature} disabled={saving}><Save className="h-4 w-4" />Enregistrer</Button>
           </div>
-          {!compliancePreview() ? <Input label="Action corrective obligatoire" value={form.corrective_action} onChange={(value) => setForm({ ...form, corrective_action: value })} /> : null}
+          {!compliancePreview() ? <div className="mt-3"><Input label="Action corrective obligatoire" value={form.corrective_action} onChange={(value) => setForm({ ...form, corrective_action: value })} /></div> : null}
         </Card>
 
         <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
           <Card className="overflow-hidden">
-            <div className="flex flex-wrap gap-2 border-b border-border p-3">
-              <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={dayFilter} onChange={(event) => setDayFilter(event.target.value)}>
-                {days.map((day) => <option key={day} value={day}>{day}</option>)}
-              </select>
-              <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}>
-                <option value="Tous">Tous services</option>
-                <option value="MIDI">Midi</option>
-                <option value="SOIR">Soir</option>
-              </select>
-              <span className="rounded-md bg-muted px-2 py-2 text-xs">Badge HACCP: {visibleSlots.every((slot) => slot.status === "FAIT" && slot.is_compliant !== false) ? "conforme" : "à suivre"}</span>
+            <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+              <Input label="Date du planning" type="date" value={targetDate} onChange={(value) => { setTargetDate(value); setForm((current) => ({ ...current, check_date: value })); }} />
+              <span className="rounded-md bg-muted px-2 py-2 text-xs">Badge HACCP : {badgeText}</span>
             </div>
             <div className="divide-y divide-border">
-              {loading ? <StateLine text="Chargement du planning" /> : null}
-              {visibleSlots.map((slot) => (
+              {loading ? <StateLine text="Chargement du planning du jour" /> : null}
+              {!loading && slots.length === 0 ? <StateLine text="Aucune prise de température prévue aujourd'hui." loading={false} /> : null}
+              {slots.map((slot) => (
                 <button key={slot.id} className="grid w-full gap-2 px-4 py-3 text-left sm:grid-cols-[1fr_110px_110px] sm:items-center" onClick={() => startFromSlot(slot)}>
                   <div>
                     <p className="text-sm font-medium">{slot.day} {slot.service === "MIDI" ? "midi" : "soir"} - {slot.equipment}</p>
@@ -258,9 +258,14 @@ export function TemperaturesClient() {
 }
 
 function Input({ label, value, type = "text", onChange }: { label: string; value: string; type?: string; onChange: (value: string) => void }) {
-  return <label className="grid gap-1 text-sm"><span className="text-xs text-foreground/55">{label}</span><input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+  return (
+    <label className="grid gap-1 text-sm">
+      <span className="text-xs text-foreground/55">{label}</span>
+      <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
 }
 
 function StateLine({ text, loading = true }: { text: string; loading?: boolean }) {
-  return <div className="flex items-center gap-3 px-4 py-4 text-sm text-foreground/55">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{text}</div>;
+  return <div className="flex items-center gap-3 px-4 py-4 text-sm text-foreground/55">{loading ? <Thermometer className="h-4 w-4 animate-pulse" /> : null}{text}</div>;
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Archive, Check, ClipboardCheck, Loader2, Pencil, Plus, Save, X, XCircle } from "lucide-react";
+import { QualityNav } from "@/components/quality/quality-nav";
 import { AppShell } from "@/components/shell/app-shell";
 import { Topbar } from "@/components/shell/topbar";
 import { Button } from "@/components/ui/button";
@@ -15,11 +16,14 @@ type HaccpTask = {
   category: string;
   frequency: "DAILY" | "WEEKLY" | "MONTHLY" | "AFTER_SERVICE" | "ON_DEMAND";
   status: "TODO" | "DONE" | "NON_COMPLIANT";
+  display_status: "TODO" | "DONE" | "NON_COMPLIANT" | "EN_RETARD";
   due_at: string | null;
   completed_at: string | null;
   completed_by: string | null;
   corrective_action: string | null;
   notes: string | null;
+  scheduled_for_date: string | null;
+  scheduled_service: "MIDI" | "SOIR" | null;
   is_archived: boolean;
   validations: Array<{
     id: string;
@@ -39,13 +43,21 @@ type FormState = {
   notes: string;
 };
 
-const emptyForm: FormState = { title: "", category: "Nettoyage", frequency: "DAILY", due_at: "", notes: "" };
+const emptyForm: FormState = { title: "", category: "Nettoyage", frequency: "ON_DEMAND", due_at: "", notes: "" };
 const frequencyLabels = { DAILY: "Quotidien", WEEKLY: "Hebdomadaire", MONTHLY: "Mensuel", AFTER_SERVICE: "Après service", ON_DEMAND: "À la demande" };
-const statusLabels = { TODO: "À faire", DONE: "Fait", NON_COMPLIANT: "Non conforme" };
+const statusLabels = { TODO: "À faire", DONE: "Fait", NON_COMPLIANT: "Non conforme", EN_RETARD: "En retard" };
+
+function todayInputValue() {
+  const now = new Date();
+  const offset = now.getTimezoneOffset();
+  return new Date(now.getTime() - offset * 60_000).toISOString().slice(0, 10);
+}
 
 export function HaccpClient() {
-  const [tasks, setTasks] = useState<HaccpTask[]>([]);
+  const [todayTasks, setTodayTasks] = useState<HaccpTask[]>([]);
+  const [historyTasks, setHistoryTasks] = useState<HaccpTask[]>([]);
   const [selectedId, setSelectedId] = useState("");
+  const [targetDate, setTargetDate] = useState(todayInputValue());
   const [form, setForm] = useState<FormState>(emptyForm);
   const [mode, setMode] = useState<"idle" | "create" | "edit">("idle");
   const [showArchived, setShowArchived] = useState(false);
@@ -56,20 +68,35 @@ export function HaccpClient() {
   const [responsible, setResponsible] = useState("Aymeric Admin");
   const [comment, setComment] = useState("");
 
-  const selected = tasks.find((task) => task.id === selectedId) ?? tasks[0] ?? null;
-  const activeTasks = useMemo(() => tasks.filter((task) => !task.is_archived), [tasks]);
+  const selected = useMemo(
+    () => [...todayTasks, ...historyTasks].find((task) => task.id === selectedId) ?? todayTasks[0] ?? historyTasks[0] ?? null,
+    [todayTasks, historyTasks, selectedId],
+  );
+  const counts = useMemo(
+    () => ({
+      todo: todayTasks.filter((task) => task.display_status === "TODO").length,
+      done: todayTasks.filter((task) => task.display_status === "DONE").length,
+      late: todayTasks.filter((task) => task.display_status === "EN_RETARD").length,
+      nonCompliant: todayTasks.filter((task) => task.display_status === "NON_COMPLIANT").length,
+    }),
+    [todayTasks],
+  );
 
   useEffect(() => {
     void loadTasks();
-  }, [showArchived]);
+  }, [showArchived, targetDate]);
 
-  async function loadTasks(selectId?: string) {
+  async function loadTasks(nextSelectedId?: string) {
     setLoading(true);
     setError("");
     try {
-      const data = await apiRequest<HaccpTask[]>(`/quality/haccp/tasks${showArchived ? "?include_archived=true" : ""}`);
-      setTasks(data);
-      setSelectedId(selectId ?? data[0]?.id ?? "");
+      const [todayData, historyData] = await Promise.all([
+        apiRequest<HaccpTask[]>(`/quality/haccp/tasks?scope=today&target_date=${targetDate}${showArchived ? "&include_archived=true" : ""}`),
+        apiRequest<HaccpTask[]>(`/quality/haccp/tasks?scope=history&target_date=${targetDate}${showArchived ? "&include_archived=true" : ""}`),
+      ]);
+      setTodayTasks(todayData);
+      setHistoryTasks(historyData.slice(0, 20));
+      setSelectedId(nextSelectedId ?? todayData[0]?.id ?? historyData[0]?.id ?? "");
     } catch (err) {
       setError(err instanceof Error ? err.message : authHint());
     } finally {
@@ -78,7 +105,7 @@ export function HaccpClient() {
   }
 
   function startCreate() {
-    setForm(emptyForm);
+    setForm({ ...emptyForm, due_at: `${targetDate}T18:00` });
     setMode("create");
     setSuccess("");
   }
@@ -104,23 +131,21 @@ export function HaccpClient() {
       return;
     }
     setSaving(true);
-    const payload = {
-      title: form.title.trim(),
-      category: form.category.trim(),
-      frequency: form.frequency,
-      due_at: form.due_at ? new Date(form.due_at).toISOString() : null,
-      notes: form.notes || null,
-    };
     try {
       const isEdit = mode === "edit" && selected;
       const saved = await apiRequest<HaccpTask>(isEdit ? `/quality/haccp/tasks/${selected.id}` : "/quality/haccp/tasks", {
         method: isEdit ? "PATCH" : "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          title: form.title.trim(),
+          category: form.category.trim(),
+          frequency: form.frequency,
+          due_at: form.due_at ? new Date(form.due_at).toISOString() : null,
+          notes: form.notes || null,
+        }),
       });
-      setTasks((current) => current.some((task) => task.id === saved.id) ? current.map((task) => task.id === saved.id ? saved : task) : [saved, ...current]);
-      setSelectedId(saved.id);
       setMode("idle");
       setSuccess(isEdit ? "Contrôle mis à jour." : "Contrôle créé.");
+      await loadTasks(saved.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sauvegarde impossible");
     } finally {
@@ -153,10 +178,9 @@ export function HaccpClient() {
           corrective_action: correctiveAction,
         }),
       });
-      setTasks((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
-      setSelectedId(updated.id);
       setComment("");
-      setSuccess(status === "DONE" ? "Contrôle validé." : "Non-conformité enregistrée.");
+      setSuccess(status === "DONE" ? "Tâche validée." : "Non-conformité enregistrée.");
+      await loadTasks(updated.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Mise à jour impossible");
     } finally {
@@ -170,13 +194,9 @@ export function HaccpClient() {
     setError("");
     setSuccess("");
     try {
-      const archived = await apiRequest<HaccpTask>(`/quality/haccp/tasks/${task.id}`, { method: "DELETE" });
-      setTasks((current) => {
-        const updated = current.map((entry) => entry.id === archived.id ? archived : entry);
-        return showArchived ? updated : updated.filter((entry) => !entry.is_archived);
-      });
-      setSelectedId((current) => current === archived.id ? "" : current);
+      await apiRequest<HaccpTask>(`/quality/haccp/tasks/${task.id}`, { method: "DELETE" });
       setSuccess("Contrôle archivé.");
+      await loadTasks();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Archivage impossible");
     } finally {
@@ -190,24 +210,27 @@ export function HaccpClient() {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 lg:px-8 lg:py-8">
         <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm text-foreground/55">Plan de maîtrise sanitaire, contrôles et actions correctives</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-normal lg:text-5xl">HACCP / PMS</h1>
+            <p className="text-sm text-foreground/55">Module qualité organisé par catégories avec récurrence automatique</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-normal lg:text-5xl">HACCP / Qualité</h1>
           </div>
-          <Button onClick={startCreate}><Plus className="h-4 w-4" />Contrôle</Button>
+          <Button onClick={startCreate}><Plus className="h-4 w-4" />Contrôle manuel</Button>
         </section>
+
+        <QualityNav active="cleaning" />
 
         {error ? <p className="rounded-md bg-muted px-3 py-2 text-sm">{error}</p> : null}
         {success ? <p className="rounded-md bg-foreground px-3 py-2 text-sm text-background">{success}</p> : null}
 
-        <section className="grid gap-3 sm:grid-cols-3">
-          <Metric label="À faire" value={String(activeTasks.filter((task) => task.status === "TODO").length)} />
-          <Metric label="Validés" value={String(activeTasks.filter((task) => task.status === "DONE").length)} />
-          <Metric label="Non conformes" value={String(activeTasks.filter((task) => task.status === "NON_COMPLIANT").length)} />
+        <section className="grid gap-3 md:grid-cols-4">
+          <Metric label="À faire aujourd'hui" value={String(counts.todo)} />
+          <Metric label="Faites aujourd'hui" value={String(counts.done)} />
+          <Metric label="En retard" value={String(counts.late)} />
+          <Metric label="Non conformes" value={String(counts.nonCompliant)} />
         </section>
 
         <Card className="p-4">
-          <h2 className="text-base font-semibold">Validation nettoyage</h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-[180px_1fr]">
+          <div className="grid gap-3 lg:grid-cols-[180px_1fr_1fr]">
+            <Input label="Date affichée" value={targetDate} type="date" onChange={setTargetDate} />
             <Input label="Responsable" value={responsible} onChange={setResponsible} />
             <Input label="Commentaire de réalisation" value={comment} onChange={setComment} />
           </div>
@@ -215,29 +238,36 @@ export function HaccpClient() {
 
         {mode !== "idle" ? <Editor form={form} setForm={setForm} saving={saving} onCancel={() => setMode("idle")} onSave={saveTask} /> : null}
 
-        <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
           <Card className="overflow-hidden">
-            <div className="border-b border-border p-3">
+            <div className="flex items-center justify-between border-b border-border p-3">
+              <div>
+                <h2 className="text-base font-semibold">Nettoyage du jour</h2>
+                <p className="text-xs text-foreground/55">Les tâches récurrentes sont générées automatiquement pour la date choisie.</p>
+              </div>
               <label className="flex items-center gap-2 text-xs text-foreground/60">
                 <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
-                Afficher les archivés
+                Archivés
               </label>
             </div>
             <div className="divide-y divide-border">
-              {loading ? <StateLine text="Chargement des contrôles" /> : null}
-              {!loading && tasks.length === 0 ? <StateLine text="Aucun contrôle HACCP" loading={false} /> : null}
-              {tasks.map((task) => (
-                <div key={task.id} className={cn("grid gap-3 px-4 py-4 sm:grid-cols-[1fr_160px_190px] sm:items-center", selected?.id === task.id && "bg-muted")}>
+              {loading ? <StateLine text="Chargement des tâches du jour" /> : null}
+              {!loading && todayTasks.length === 0 ? <StateLine text="Aucune tâche de nettoyage prévue pour cette date." loading={false} /> : null}
+              {todayTasks.map((task) => (
+                <div key={task.id} className={cn("grid gap-3 px-4 py-4 sm:grid-cols-[1fr_130px_190px] sm:items-center", selected?.id === task.id && "bg-muted")}>
                   <button className="flex min-w-0 gap-3 text-left" onClick={() => setSelectedId(task.id)}>
-                    <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted", task.status === "NON_COMPLIANT" && "bg-foreground text-background")}>
+                    <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted", task.display_status === "NON_COMPLIANT" && "bg-foreground text-background")}>
                       <ClipboardCheck className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{task.title}</p>
-                      <p className="truncate text-xs text-foreground/55">{task.category} - {frequencyLabels[task.frequency]}</p>
+                      <p className="truncate text-xs text-foreground/55">
+                        {frequencyLabels[task.frequency]}
+                        {task.scheduled_service ? ` - service ${task.scheduled_service === "MIDI" ? "midi" : "soir"}` : ""}
+                      </p>
                     </div>
                   </button>
-                  <span className="rounded-md bg-muted px-2 py-1 text-xs text-foreground/70">{statusLabels[task.status]}</span>
+                  <span className="rounded-md bg-muted px-2 py-1 text-xs text-foreground/70">{statusLabels[task.display_status]}</span>
                   <div className="flex gap-2 sm:justify-end">
                     <Button variant="secondary" size="icon" aria-label="Valider" disabled={saving || task.is_archived} onClick={() => updateStatus(task, "DONE")}><Check className="h-4 w-4" /></Button>
                     <Button variant="secondary" size="icon" aria-label="Non conforme" disabled={saving || task.is_archived} onClick={() => updateStatus(task, "NON_COMPLIANT")}><XCircle className="h-4 w-4" /></Button>
@@ -251,9 +281,9 @@ export function HaccpClient() {
 
           <Card className="p-5">
             {selected ? (
-              <div>
+              <div id="historique-controles">
                 <h2 className="text-xl font-semibold">{selected.title}</h2>
-                <p className="mt-2 text-sm text-foreground/55">{selected.category} - {statusLabels[selected.status]}</p>
+                <p className="mt-2 text-sm text-foreground/55">{selected.category} - {statusLabels[selected.display_status]}</p>
                 <div className="mt-5 grid gap-2 sm:grid-cols-2">
                   <Metric label="Fréquence" value={frequencyLabels[selected.frequency]} />
                   <Metric label="Échéance" value={selected.due_at ? new Date(selected.due_at).toLocaleString("fr-FR") : "Non définie"} />
@@ -271,9 +301,32 @@ export function HaccpClient() {
                   ))}
                 </div>
               </div>
-            ) : <p className="text-sm text-foreground/55">Sélectionnez un contrôle.</p>}
+            ) : <p className="text-sm text-foreground/55">Sélectionnez une tâche du jour.</p>}
           </Card>
         </section>
+
+        <Card className="overflow-hidden">
+          <div className="border-b border-border p-3">
+            <h2 className="text-base font-semibold">Historique / contrôles</h2>
+            <p className="text-xs text-foreground/55">Les jours précédents restent disponibles séparément des tâches du jour.</p>
+          </div>
+          <div className="divide-y divide-border">
+            {historyTasks.length === 0 ? <StateLine text="Aucun historique disponible avant cette date." loading={false} /> : null}
+            {historyTasks.map((task) => (
+              <button key={task.id} className="grid w-full gap-2 px-4 py-3 text-left sm:grid-cols-[1fr_120px_180px] sm:items-center" onClick={() => setSelectedId(task.id)}>
+                <div>
+                  <p className="text-sm font-medium">{task.title}</p>
+                  <p className="text-xs text-foreground/55">
+                    {task.scheduled_for_date ? new Date(task.scheduled_for_date).toLocaleDateString("fr-FR") : "Sans date"}
+                    {task.scheduled_service ? ` - ${task.scheduled_service === "MIDI" ? "midi" : "soir"}` : ""}
+                  </p>
+                </div>
+                <span className="rounded-md bg-muted px-2 py-1 text-xs text-foreground/70">{statusLabels[task.display_status]}</span>
+                <span className="text-xs text-foreground/55">{task.completed_by || "Aucun responsable"}</span>
+              </button>
+            ))}
+          </div>
+        </Card>
       </div>
     </AppShell>
   );
@@ -290,7 +343,7 @@ function Editor({ form, setForm, saving, onCancel, onSave }: { form: FormState; 
         <Input label="Catégorie" value={form.category} onChange={(value) => setField("category", value)} />
         <label className="grid gap-1 text-sm">
           <span className="text-xs text-foreground/55">Fréquence</span>
-          <select className="h-10 rounded-md border border-border bg-background px-3 outline-none" value={form.frequency} onChange={(event) => setField("frequency", event.target.value)}>
+          <select className="h-10 rounded-md border border-border bg-background px-3 outline-none" value={form.frequency} onChange={(event) => setField("frequency", event.target.value as HaccpTask["frequency"])}>
             {Object.entries(frequencyLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>

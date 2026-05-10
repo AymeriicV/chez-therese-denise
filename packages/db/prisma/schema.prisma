@@ -349,6 +349,10 @@ model HaccpTask {
   title            String
   category         String
   frequency        String
+  templateKey      String?
+  scheduledForDate DateTime?
+  scheduledService String?
+  isRecurring      Boolean    @default(false)
   status           String     @default("TODO")
   dueAt            DateTime?
   completedAt      DateTime?
@@ -362,6 +366,8 @@ model HaccpTask {
   updatedAt        DateTime   @updatedAt
   restaurant       Restaurant @relation(fields: [restaurantId], references: [id])
   validations      HaccpTaskValidation[]
+
+  @@unique([restaurantId, templateKey, scheduledForDate, scheduledService])
 }
 
 model HaccpTaskValidation {

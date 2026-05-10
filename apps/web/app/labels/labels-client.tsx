@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Archive, Eye, Loader2, Pencil, Plus, Printer, Save, Tags, X } from "lucide-react";
+import { QualityNav } from "@/components/quality/quality-nav";
 import { AppShell } from "@/components/shell/app-shell";
 import { Topbar } from "@/components/shell/topbar";
 import { Button } from "@/components/ui/button";
@@ -255,11 +256,13 @@ export function LabelsClient() {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 lg:px-8 lg:py-8">
         <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm text-foreground/55">Les étiquettes créées apparaissent dans la liste ci-dessous et dans l'aperçu imprimable.</p>
+            <p className="text-sm text-foreground/55">Catégorie Étiquettes du module Qualité / HACCP</p>
             <h1 className="mt-1 text-3xl font-semibold tracking-normal lg:text-5xl">Étiquettes</h1>
           </div>
           <Button onClick={() => startCreate()}><Plus className="h-4 w-4" />Créer une étiquette</Button>
         </section>
+
+        <QualityNav compact active="labels" />
 
         {error ? <p className="rounded-md bg-muted px-3 py-2 text-sm">{error}</p> : null}
         {success ? <p className="rounded-md bg-foreground px-3 py-2 text-sm text-background">{success}</p> : null}

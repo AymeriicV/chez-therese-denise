@@ -33,6 +33,7 @@ Pour reprendre apres interruption:
 - [x] 12 - UI FR, allergenes automatiques, fiches techniques exploitables et archivage
 - [x] 13 - HACCP PMS, temperatures et etiquettes exploitables
 - [x] 14 - Configuration restaurant HACCP, equipements, planning temperatures et etiquettes
+- [x] 15 - Organisation Qualite / HACCP et recurrence journaliere reelle
 
 ## Modules cible
 
@@ -40,7 +41,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-Configure restaurant HACCP equipment labels and cleaning.
+Organize quality module and recurring HACCP schedules.
 
 ## Commandes etape 02
 
@@ -305,3 +306,34 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - `curl -I http://localhost:3000/haccp`: HTTP 200.
 - Login local `aymericvenacterpro@gmail.com / admin`: OK.
 - API validee avec JWT et `X-Restaurant-Id`: equipements temperatures, planning mercredi midi, releve conforme armoire refrigeree, releve non conforme congelateur avec action corrective, taches nettoyage, validation Sol, archivage tache, creation etiquette depuis fiche technique, creation etiquette libre et impression.
+
+## Etape 15 - Details
+
+- Prisma: ajout des champs de recurrence `templateKey`, `scheduledForDate`, `scheduledService` et `isRecurring` sur `HaccpTask`, avec migration `20260510190000_quality_recurring_haccp`.
+- API: generation automatique des occurrences de nettoyage a la date reelle, sans doublons, avec separation jour courant / historique et statuts `A faire`, `Fait`, `En retard`.
+- API: taches quotidiennes definies pour `Sol`, `Plans de travail`, `Frigos`, `Lave-main`, `Plonge`, `Machine a plonge`.
+- API: taches `Apres service` generees pour `Friteuse`, `Piano de cuisson`, `Four` sur `Midi` et `Soir`.
+- API: tache hebdomadaire `Hotte` generee uniquement le jour prevu.
+- API: planning temperatures filtre par vraie date avec message vide hors planning et conservation de l'historique des releves.
+- Frontend: topbar corrigee pour afficher la vraie date du client, suppression de la date hardcodee `Vendredi 8 mai 2026`.
+- Frontend: sidebar et pages `/haccp`, `/temperatures`, `/labels` regroupees sous une experience unique `Qualite / HACCP`.
+- Frontend: nouvelle navigation de categories `Nettoyage`, `Temperatures`, `Etiquettes`, `Historique / controles`.
+- Frontend: `/haccp` devient l'entree du module avec taches du jour, filtre par date, historique date et validations persistantes.
+- Frontend: `/temperatures` affiche uniquement les prises attendues pour la date affichee, ou `Aucune prise de temperature prevue aujourd'hui`.
+
+## Validation etape 15
+
+- `python3 -m compileall -q apps/api`: OK.
+- `git diff --check`: OK.
+- `docker compose run --rm api prisma generate --schema /app/packages/db/prisma/schema.prisma`: OK.
+- `docker compose run --rm api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma`: OK, migration `20260510190000_quality_recurring_haccp` appliquee.
+- `docker compose run --rm --no-deps web pnpm --filter @ctd/web build`: OK.
+- `docker compose up --build -d`: OK.
+- `docker compose ps`: `ctd-api`, `ctd-web`, `ctd-postgres` UP.
+- `curl http://localhost:8000/health`: OK.
+- `curl -I http://localhost:3000/haccp`: HTTP 200.
+- `curl -I http://localhost:3000/temperatures`: HTTP 200.
+- `curl -I http://localhost:3000/labels`: HTTP 200.
+- Recherche code `8 mai`: aucun resultat dans `apps/web` et `apps/api`.
+- API qualite authentifiee: planning temperatures du dimanche 10 mai 2026 retourne 4 releves `MIDI`, taches HACCP du 10 mai et du 11 mai distinctes sans etat partage.
+- Validation metier: `Sol` marque `DONE` le 10 mai 2026 puis relu en `DONE` apres refresh; le 11 mai 2026 reste genere en `TODO`.

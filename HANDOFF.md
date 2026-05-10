@@ -33,6 +33,11 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - `/labels`: bouton `Creer une etiquette`, source stock/fiche/libre, champs DLC-DDM, lot, allergenes, zone, temperature de conservation, apercu imprimable, impression et archivage.
 - `/temperatures`: equipements `Armoire refrigeree`, `Timbre chaud`, `Timbre entree / dessert`, `Congelateur`, saisie rapide, conformite automatique, action corrective obligatoire si non conforme, historique par equipement.
 - `/haccp`: taches Sol, Plans de travail, Frigos, Hotte, Friteuse, Piano de cuisson, Four, Lave-main, Plonge, Machine a plonge, validation historisee avec responsable/commentaire et archivage.
+- Organisation Qualite / HACCP unifiee: sidebar `Qualite / HACCP`, navigation commune entre `/haccp`, `/temperatures`, `/labels`, categorie `Historique / controles`.
+- Recurrence HACCP reelle: occurrences journalieres datees, pas de re-creation manuelle, pas de doublons, etat `fait hier` non reporte au lendemain.
+- Topbar corrigee: plus de date mockee `8 mai`, date reelle du client affichee.
+- `/haccp`: taches du jour par date, historique des jours precedents, validation persistante de `Sol` testee.
+- `/temperatures`: affiche uniquement les prises attendues pour la date choisie, sinon message `Aucune prise de temperature prevue aujourd'hui`.
 
 ## Validation realisee
 
@@ -47,6 +52,7 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - API testee: fournisseurs, stock, recettes, ingredients recettes, archivage.
 - API qualite testee: temperatures, taches HACCP, etiquettes, summary et archivage.
 - API qualite restaurant testee: planning mercredi midi, releve conforme armoire refrigeree, releve non conforme congelateur avec action corrective, validation Sol, creation etiquette depuis fiche technique, creation etiquette libre, impression etiquette.
+- API qualite recurrente testee: planning temperatures du dimanche 10 mai 2026, taches HACCP du 10 mai et du 11 mai distinctes, `Sol` reste `DONE` au refresh du 10 mai et revient `TODO` le 11 mai.
 
 ## Prochaine reprise
 
