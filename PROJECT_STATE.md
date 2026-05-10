@@ -196,6 +196,24 @@ docker compose exec -T web pnpm --filter @ctd/web build
 - Frontend: boutons des factures/inventaires desactives selon les etats metier et listes vides distinctes des chargements.
 - Frontend: correction du module `/recipes` manquant pour debloquer le build Next.js, avec chargement reel `/recipes` et creation simple connectee a l'API.
 
+## Acces local
+
+Un administrateur local est cree automatiquement au demarrage de l'API en `APP_ENV=local` si aucun compte avec cet email n'existe:
+
+- Email: `admin@ctd-app.fr`
+- Mot de passe: `ChangeMeLocal123!`
+- Role: `OWNER`
+- Restaurant: `Chez Therese et Denise`
+
+Ces valeurs peuvent etre surchargees avec `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` et `SEED_LOCAL_ADMIN=false`.
+
+## Correctifs auth frontend
+
+- Le client API unique `apps/web/lib/api.ts` ajoute `Authorization: Bearer <token>` et `X-Restaurant-Id` depuis `localStorage`.
+- Les appels `/auth/*` sont publics; les autres appels exigent une session.
+- Sans token ou sur `401`, le frontend vide la session locale et redirige vers `/login`.
+- Les pages sous `AppShell` redirigent vers `/login` avant d'afficher les modules si la session locale est absente.
+
 ## Prochaine etape recommandee
 
 Commiter et pousser l'etape 11, puis reprendre le bloc 2 avec recipes, sub-recipes, food-cost, margins et allergens.

@@ -7,6 +7,7 @@ from fastapi.responses import ORJSONResponse
 from app.core.config import get_settings
 from app.db.prisma import connect_db, disconnect_db
 from app.routers import auth, dashboard, inventory, invoices, quality, realtime, recipes, suppliers
+from app.services.seed import seed_local_admin
 
 
 @asynccontextmanager
@@ -15,6 +16,7 @@ async def lifespan(_: FastAPI):
         yield
         return
     await connect_db()
+    await seed_local_admin(settings)
     yield
     await disconnect_db()
 

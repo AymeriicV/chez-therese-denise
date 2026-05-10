@@ -22,12 +22,26 @@ export class ApiError extends Error {
 }
 
 type ApiOptions = RequestInit & {
+  authRequired?: boolean;
   skipJson?: boolean;
 };
 
 export function getStoredToken() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem("ctd_token");
+}
+
+export function clearStoredSession() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem("ctd_token");
+  window.localStorage.removeItem("ctd_restaurant_id");
+}
+
+export function redirectToLogin() {
+  if (typeof window === "undefined") return;
+  if (window.location.pathname !== "/login") {
+    window.location.assign("/login");
+  }
 }
 
 export function getStoredRestaurantId() {
@@ -45,7 +59,13 @@ export function getStoredRestaurantId() {
 }
 
 export async function apiRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
+  const authRequired = options.authRequired ?? !path.startsWith("/auth/");
   const token = getStoredToken();
+  if (authRequired && !token) {
+    clearStoredSession();
+    redirectToLogin();
+    throw new ApiError("Authentification requise", 401);
+  }
   const restaurantId = getStoredRestaurantId();
   const headers = new Headers(options.headers);
   if (!(options.body instanceof FormData)) {
@@ -58,6 +78,10 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
     ...options,
     headers,
   });
+  if (response.status === 401 && authRequired) {
+    clearStoredSession();
+    redirectToLogin();
+  }
   if (!response.ok) {
     let message = `Erreur API ${response.status}`;
     try {

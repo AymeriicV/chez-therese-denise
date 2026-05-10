@@ -16,6 +16,9 @@ class Settings(BaseSettings):
         default=r"^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|[0-9]{1,3}(\.[0-9]{1,3}){3})(:\d+)?$",
         alias="CORS_ORIGIN_REGEX",
     )
+    seed_local_admin: bool = Field(default=True, alias="SEED_LOCAL_ADMIN")
+    seed_admin_email: str = Field(default="admin@ctd-app.fr", alias="SEED_ADMIN_EMAIL")
+    seed_admin_password: str = Field(default="ChangeMeLocal123!", alias="SEED_ADMIN_PASSWORD")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
 

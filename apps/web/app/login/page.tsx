@@ -22,6 +22,7 @@ export default function LoginPage() {
     try {
       const response = await apiRequest<{ access_token: string }>("/auth/login", {
         method: "POST",
+        authRequired: false,
         body: JSON.stringify({ email, password }),
       });
       window.localStorage.setItem("ctd_token", response.access_token);
