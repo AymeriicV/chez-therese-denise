@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Archive, Eye, Loader2, Pencil, Plus, Printer, Save, Tags, X } from "lucide-react";
 import { QualityNav } from "@/components/quality/quality-nav";
 import { AppShell } from "@/components/shell/app-shell";
@@ -71,6 +72,9 @@ function defaultForm(): FormState {
 }
 
 export function LabelsClient() {
+  const searchParams = useSearchParams();
+  const sourceTypeParam = searchParams.get("source_type");
+  const sourceIdParam = searchParams.get("source_id");
   const [labels, setLabels] = useState<FoodLabel[]>([]);
   const [sources, setSources] = useState<Sources>({ stock: [], recipes: [] });
   const [selectedId, setSelectedId] = useState("");
@@ -102,6 +106,20 @@ export function LabelsClient() {
       setLabels(labelData);
       setSources(sourceData);
       setSelectedId(selectId ?? labelData[0]?.id ?? "");
+      if (sourceTypeParam === "RECIPE" && sourceIdParam) {
+        const source = sourceData.recipes.find((item) => item.id === sourceIdParam);
+        if (source) {
+          setForm({
+            ...defaultForm(),
+            source_type: "RECIPE",
+            source_id: source.id,
+            title: source.name,
+            item_name: source.name,
+            allergens: source.allergens.join(", "),
+          });
+          setMode("create");
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : authHint());
     } finally {

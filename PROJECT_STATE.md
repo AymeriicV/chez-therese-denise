@@ -40,6 +40,7 @@ Pour reprendre apres interruption:
 - [x] 19 - Refonte UX/UI premium du module fiches techniques
 - [x] 20 - Dashboard reel, analytics et parametres entreprise
 - [x] 21 - Preparation integration L'Addition dans les parametres
+- [x] 22 - Simplification et polissage des fiches techniques / recipes
 
 ## Modules cible
 
@@ -47,7 +48,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-Preparation integration L'Addition dans les parametres.
+Simplification et polissage des fiches techniques / recipes.
 
 ## Commandes etape 02
 
@@ -158,6 +159,15 @@ docker compose up --build -d
 - Trois actions sont preparees dans l'API et l'UI: test de configuration, synchronisation manuelle des ventes et desactivation de l'integration.
 - Les modeles `IntegrationCredential`, `SalesImport`, `SalesTicket` et `SalesTicketLine` sont ajoutes pour preparer le stockage des ventes L'Addition, des prochaines analyses CA, des ventes par fiche technique et des previsions.
 - Aucun appel vers l'API L'Addition n'est lance tant que la documentation exacte n'est pas disponible; le flux reste local, audit trail inclus, et pret pour une vraie synchro plus tard.
+
+## Etape 22 - Details
+
+- `/recipes` a ete simplifie pour garder uniquement les fonctions vraiment utiles en restauration: liste des fiches, detail metier, edition, duplication, archivage, production et etiquette.
+- La photo recette a ete retiree de l'interface pour supprimer du bruit visuel et rendre la page plus dense et plus lisible.
+- La zone detail devient editable directement pour le nom, la categorie, les portions et le prix de vente.
+- Les actions `Produire` et `Étiquette` renvoient vers les modules métiers deja fonctionnels avec la fiche preselectionnee.
+- La grille des ingredients reste compacte, avec recherche d'article ou de sous-recette, calcul ligne, allergenes, edition, suppression et drag-and-drop.
+- Le module reste responsive: colonne liste a gauche, detail au centre, ingredients sous le detail ou a droite en tres grand ecran.
 
 ## Validation etape 18
 

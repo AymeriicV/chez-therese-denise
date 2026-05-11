@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import { LabelsClient } from "./labels-client";
 
 export default function Page() {
-  return <LabelsClient />;
+  return (
+    <Suspense fallback={null}>
+      <LabelsClient />
+    </Suspense>
+  );
 }

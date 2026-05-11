@@ -25,6 +25,8 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Page settings operationnelle: infos restaurant, roles, HACCP, stock, OCR, alertes prix, L'Addition et imprimantes restaurant.
 - La section L'Addition dans `Parametres > Integrations` est maintenant structuree avec API key, restaurant ID, URL API, statut de connexion et derniere synchronisation, plus les actions test/sync/disable.
 - Les modeles `IntegrationCredential`, `SalesImport`, `SalesTicket` et `SalesTicketLine` sont prets pour les ventes L'Addition, sans connexion externe active tant que la documentation exacte n'est pas disponible.
+- `/recipes` a ete simplifie: suppression de la photo recette, edition de fiche directe, duplication, archivage, actions vers production et etiquettes avec la fiche preselectionnee, et grille ingredients plus dense.
+- Les pages `production` et `labels` acceptent maintenant la recette preselectionnee depuis le module fiches techniques pour accelerer les workflows cuisine.
 - Les prix valides sur facture creent maintenant `PriceHistory` et `PriceAlert` pour alimenter dashboard et analytics.
 - Les endpoints `/dashboard/overview`, `/analytics/overview`, `/analytics/price-alerts` et `/settings/company` sont branchés au backend.
 - `/ai` reste une page placeholder propre en attendant le moteur IA final.
@@ -100,6 +102,7 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Page `recipes` repond `200` apres la refonte UX/UI premium.
 - Pages `team`, `planning` et `time-clock` repondent `200` depuis le container Next avec fetch manuel.
 - Pages `invoices`, `team`, `planning` et `time-clock` repondent `200` depuis le container Next avec fetch manuel.
+- Page `recipes` repond `200` avec le nouveau layout simplifie, sans photo recette.
 - Les routes `/api/v1/invoices/upload` et `/api/v1/invoices/{id}/document` fonctionnent avec token local et fournisseur selectionne.
 
 ## Derniere correction
