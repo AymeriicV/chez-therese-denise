@@ -3,6 +3,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from prisma.errors import UniqueViolationError
 
 from app.db.prisma import db
 from app.models.schemas import (
@@ -760,7 +761,28 @@ async def ensure_haccp_daily_tasks(restaurant_id: str, target_date: date):
                 },
             )
         else:
-            await db.haccptask.create(data=data)
+            try:
+                await db.haccptask.create(data=data)
+            except UniqueViolationError:
+                existing = await db.haccptask.find_first(
+                    where={
+                        "restaurantId": restaurant_id,
+                        "templateKey": task["template_key"],
+                        "scheduledForDate": _utc_day_start(target_date),
+                        "scheduledService": task["scheduled_service"],
+                    }
+                )
+                if existing:
+                    await db.haccptask.update(
+                        where={"id": existing.id},
+                        data={
+                            "title": task["title"],
+                            "frequency": task["frequency"],
+                            "dueAt": task["due_at"],
+                            "isArchived": False,
+                            "archivedAt": None,
+                        },
+                    )
 
     legacy_tasks = await db.haccptask.find_many(
         where={
