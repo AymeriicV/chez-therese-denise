@@ -578,14 +578,14 @@ async def _store_recipe_photo(file: UploadFile, restaurant_id: str, recipe_id: s
 
 
 async def _next_recipe_sort_order(recipe_id: str) -> int:
-    ingredients = await db.recipeingredient.find_many(where={"recipeId": recipe_id}, select={"sortOrder": True})
+    ingredients = await db.recipeingredient.find_many(where={"recipeId": recipe_id})
     if not ingredients:
         return 0
     return max(_ingredient_sort_order(ingredient) for ingredient in ingredients) + 1
 
 
 async def _next_sub_recipe_sort_order(sub_recipe_id: str) -> int:
-    ingredients = await db.subrecipeingredient.find_many(where={"subRecipeId": sub_recipe_id}, select={"sortOrder": True})
+    ingredients = await db.subrecipeingredient.find_many(where={"subRecipeId": sub_recipe_id})
     if not ingredients:
         return 0
     return max(_ingredient_sort_order(ingredient) for ingredient in ingredients) + 1
