@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -73,6 +74,7 @@ async def punch_in(ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF"
         entity="TimeClockLog",
         entity_id=entry.id,
     )
+    await _sync_planning_from_time_clock(ctx["restaurant_id"], ctx["user"].id, entry.clockIn)
     return _serialize_entry(entry, ctx["restaurant_id"])
 
 
@@ -102,6 +104,7 @@ async def punch_out(ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF
         entity="TimeClockLog",
         entity_id=updated.id,
     )
+    await _sync_planning_from_time_clock(ctx["restaurant_id"], ctx["user"].id, updated.clockIn, updated.clockOut)
     return _serialize_entry(updated, ctx["restaurant_id"])
 
 
@@ -162,6 +165,12 @@ async def create_correction(payload: TimeClockCorrectionCreate, ctx=Depends(requ
         entity="TimeClockLog",
         entity_id=entry.id,
         metadata={"reason": payload.reason, "correctionId": correction.id},
+    )
+    await _sync_planning_from_time_clock(
+        ctx["restaurant_id"],
+        employee.user.id,
+        entry.clockIn,
+        entry.clockOut,
     )
     refreshed = await _get_entry(entry.id, ctx["restaurant_id"])
     return _serialize_entry(refreshed, ctx["restaurant_id"])
@@ -231,3 +240,80 @@ def _worked_minutes(clock_in: datetime, clock_out: datetime | None) -> int:
     if not clock_out:
         return 0
     return max(int((clock_out - clock_in).total_seconds() // 60), 0)
+
+
+async def _sync_planning_from_time_clock(restaurant_id: str, user_id: str, clock_in: datetime, clock_out: datetime | None = None):
+    restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
+    tz_name = restaurant.timezone if restaurant and restaurant.timezone else "UTC"
+    try:
+        zone = ZoneInfo(tz_name)
+    except Exception:
+        zone = ZoneInfo("UTC")
+
+    local_clock_in = clock_in.astimezone(zone)
+    local_clock_out = clock_out.astimezone(zone) if clock_out else None
+    week_start = _week_start(local_clock_in.date())
+    schedule = await db.planningschedule.find_unique(
+        where={"restaurantId_userId_weekStart": {"restaurantId": restaurant_id, "userId": user_id, "weekStart": week_start}},
+        include={"days": True, "user": {"include": {"employeeProfile": True, "memberships": True}}},
+    )
+    if not schedule:
+        user = await db.user.find_unique(where={"id": user_id}, include={"employeeProfile": True, "memberships": True})
+        profile = getattr(user, "employeeProfile", None)
+        schedule = await db.planningschedule.create(
+            data={
+                "restaurantId": restaurant_id,
+                "userId": user_id,
+                "weekStart": week_start,
+                "weeklyTargetMinutes": 0,
+                "position": profile.position if profile and profile.position else "Badgeuse",
+                "comment": "Créé depuis la badgeuse",
+                "isDayOff": False,
+            },
+            include={"days": True, "user": {"include": {"employeeProfile": True, "memberships": True}}},
+        )
+
+    day = next((item for item in getattr(schedule, "days", []) if item.weekday == local_clock_in.weekday()), None)
+    clock_in_label = local_clock_in.strftime("%H:%M")
+    clock_out_label = local_clock_out.strftime("%H:%M") if local_clock_out else None
+    should_create_or_update = (
+        day is None
+        or day.isDayOff
+        or (not day.morningStart and not day.eveningStart)
+    )
+    if not should_create_or_update:
+        return
+
+    day_data = {
+        "morningStart": day.morningStart if day else clock_in_label,
+        "morningEnd": day.morningEnd if day else clock_out_label,
+        "breakMinutes": day.breakMinutes if day else 0,
+        "eveningStart": day.eveningStart if day else None,
+        "eveningEnd": day.eveningEnd if day else None,
+        "isDayOff": False,
+        "comment": day.comment if day else "Créé depuis la badgeuse",
+    }
+    if day and day.isDayOff:
+        day_data["morningStart"] = clock_in_label
+        if clock_out_label:
+            day_data["morningEnd"] = clock_out_label
+    elif day and not day.morningStart:
+        day_data["morningStart"] = clock_in_label
+        if clock_out_label:
+            day_data["morningEnd"] = clock_out_label
+    elif not day:
+        day_data["morningStart"] = clock_in_label
+        day_data["morningEnd"] = clock_out_label
+
+    existing = None
+    if day:
+        existing = await db.planningscheduleday.find_first(where={"id": day.id, "planningScheduleId": schedule.id})
+    if existing:
+        await db.planningscheduleday.update(where={"id": existing.id}, data=day_data)
+    else:
+        await db.planningscheduleday.create(data={"planningScheduleId": schedule.id, "weekday": local_clock_in.weekday(), **day_data})
+
+
+def _week_start(reference_date):
+    monday = reference_date - timedelta(days=reference_date.weekday())
+    return datetime.combine(monday, datetime.min.time(), UTC)

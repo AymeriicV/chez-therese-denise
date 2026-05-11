@@ -139,6 +139,11 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - HACCP: quand une règle `AFTER_SERVICE` n'a pas de service explicite, le backend génère une occurrence matin et une occurrence soir.
 - HACCP: l'UI `/haccp` affiche correctement ces deux services dans la liste et dans les détails.
 
+## Derniere correction
+
+- Badgeuse -> planning: un badge sur un jour de repos crée ou reactive la cellule du jour avec l'heure badgée.
+- Badgeuse -> planning: le planning n'est pas ecrase quand un shift existe deja; la synchronisation s'active seulement si la cellule est absente, vide ou repos.
+
 ## Prochaine reprise
 
 Continuer avec commandes fournisseurs, ou reprendre sous-recettes avancees, couts matieres, marges et allergenes consolides. Garder la meme regle: aucun bouton decoratif, mutations branchees API, erreurs visibles et state UI mis a jour depuis les reponses backend.

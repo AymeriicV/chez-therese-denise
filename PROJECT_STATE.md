@@ -520,3 +520,9 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - Les controles `AFTER_SERVICE` sont maintenant labels `Matin` et `Soir` au lieu de `Midi` et `Soir`.
 - Le backend genere deux occurrences distinctes pour les tâches sans service explicite: une le matin, une le soir.
 - L'interface HACCP affiche maintenant correctement `matin` et `soir` pour les contrôles de nettoyage après service.
+
+## Etape 22 - Badgeuse et planning
+
+- Un pointage employé sur un jour de repos crée ou reactive la cellule planning de la journée avec l'heure badgée.
+- Le planning du jour ne reste plus a zero quand l'employe badge sur un jour sans service.
+- La synchronisation badgeuse -> planning ne remplace pas les shifts deja saisis par l'OWNER, elle n'agit que si la cellule est absente, vide ou en repos.
