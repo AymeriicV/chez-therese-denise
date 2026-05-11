@@ -23,6 +23,8 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Dashboard reel connecte aux vraies donnees du SaaS: factures, stock, HACCP, production, planning, activite recente et alertes prix.
 - Page analytics operationnelle: evolution achats, variations de prix, food cost, marges, production, stock, temps equipe et alertes prix persistantes.
 - Page settings operationnelle: infos restaurant, roles, HACCP, stock, OCR, alertes prix, L'Addition et imprimantes restaurant.
+- La section L'Addition dans `Parametres > Integrations` est maintenant structuree avec API key, restaurant ID, URL API, statut de connexion et derniere synchronisation, plus les actions test/sync/disable.
+- Les modeles `IntegrationCredential`, `SalesImport`, `SalesTicket` et `SalesTicketLine` sont prets pour les ventes L'Addition, sans connexion externe active tant que la documentation exacte n'est pas disponible.
 - Les prix valides sur facture creent maintenant `PriceHistory` et `PriceAlert` pour alimenter dashboard et analytics.
 - Les endpoints `/dashboard/overview`, `/analytics/overview`, `/analytics/price-alerts` et `/settings/company` sont branchés au backend.
 - `/ai` reste une page placeholder propre en attendant le moteur IA final.

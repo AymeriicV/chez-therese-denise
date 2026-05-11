@@ -101,6 +101,9 @@ model Restaurant {
   auditLogs           AuditLog[]
   notifications       Notification[]
   companySettings     CompanySettings?
+  integrationCredentials IntegrationCredential[]
+  salesImports        SalesImport[]
+  salesTickets        SalesTicket[]
   employeeProfiles    EmployeeProfile[]
   shifts              Shift[]
   planningSchedules   PlanningSchedule[]
@@ -247,6 +250,7 @@ model InventoryItem {
   purchaseOrderLines PurchaseOrderLine[]
   priceHistories PriceHistory[]
   priceAlerts   PriceAlert[]
+  salesTicketLines SalesTicketLine[]
 }
 
 model PurchaseOrder {
@@ -350,6 +354,7 @@ model Recipe {
   restaurant     Restaurant         @relation(fields: [restaurantId], references: [id])
   ingredients    RecipeIngredient[]
   productionBatches ProductionBatch[]
+  salesTicketLines SalesTicketLine[]
 }
 
 model SubRecipe {
@@ -370,6 +375,7 @@ model SubRecipe {
   restaurant     Restaurant            @relation(fields: [restaurantId], references: [id])
   ingredients    SubRecipeIngredient[] @relation("SubRecipeIngredients")
   recipeUsages   RecipeIngredient[]    @relation("RecipeIngredientSubRecipe")
+  salesTicketLines SalesTicketLine[]
 }
 
 model RecipeIngredient {
@@ -698,6 +704,109 @@ model CompanySettings {
   haccpManager String?
   settings     Json       @default("{}")
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+}
+
+model IntegrationCredential {
+  id                String     @id @default(uuid())
+  restaurantId      String
+  provider          String
+  displayName       String?
+  apiKey            String?
+  restaurantExternalId String?
+  apiUrl            String?
+  enabled           Boolean    @default(false)
+  connectionStatus  String     @default("INACTIF")
+  lastTestedAt      DateTime?
+  lastSyncAt        DateTime?
+  lastError         String?
+  metadata          Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  restaurant        Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  salesImports      SalesImport[]
+  salesTickets      SalesTicket[]
+
+  @@unique([restaurantId, provider])
+  @@index([restaurantId, provider, enabled])
+}
+
+model SalesImport {
+  id                   String                @id @default(uuid())
+  restaurantId         String
+  integrationCredentialId String?
+  provider             String
+  status               String                @default("REQUESTED")
+  externalBatchId      String?
+  sourceLabel          String?
+  totalTickets         Int                   @default(0)
+  totalAmount         Decimal               @default(0) @db.Decimal(12, 2)
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  errorMessage         String?
+  rawPayload           Json?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  restaurant           Restaurant            @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  integrationCredential IntegrationCredential? @relation(fields: [integrationCredentialId], references: [id], onDelete: SetNull)
+  tickets              SalesTicket[]
+
+  @@index([restaurantId, provider, createdAt])
+}
+
+model SalesTicket {
+  id                   String             @id @default(uuid())
+  restaurantId         String
+  integrationCredentialId String?
+  salesImportId        String?
+  provider             String
+  externalId           String?
+  ticketNumber         String?
+  ticketDate           DateTime?
+  closedAt             DateTime?
+  sourceChannel        String?
+  customerName         String?
+  tableNumber          String?
+  paymentMethod        String?
+  totalHt              Decimal           @default(0) @db.Decimal(12, 2)
+  totalTax             Decimal           @default(0) @db.Decimal(12, 2)
+  totalTtc             Decimal           @default(0) @db.Decimal(12, 2)
+  rawPayload           Json?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  restaurant           Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  integrationCredential IntegrationCredential? @relation(fields: [integrationCredentialId], references: [id], onDelete: SetNull)
+  salesImport          SalesImport?      @relation(fields: [salesImportId], references: [id], onDelete: SetNull)
+  lines                SalesTicketLine[]
+
+  @@unique([restaurantId, provider, externalId])
+  @@index([restaurantId, provider, ticketDate])
+}
+
+model SalesTicketLine {
+  id                   String         @id @default(uuid())
+  salesTicketId        String
+  inventoryItemId      String?
+  recipeId             String?
+  subRecipeId          String?
+  codeArticle          String?
+  label                String
+  quantity             Decimal        @db.Decimal(12, 3)
+  unit                 String
+  unitPrice            Decimal        @db.Decimal(12, 4)
+  totalHt              Decimal        @db.Decimal(12, 2)
+  vatRate              Decimal?       @db.Decimal(5, 2)
+  category             String?
+  sortOrder            Int            @default(0)
+  matchedBy            String?
+  rawPayload           Json?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  salesTicket          SalesTicket    @relation(fields: [salesTicketId], references: [id], onDelete: Cascade)
+  inventoryItem        InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  recipe               Recipe?        @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+  subRecipe            SubRecipe?     @relation(fields: [subRecipeId], references: [id], onDelete: SetNull)
+
+  @@index([salesTicketId, sortOrder])
 }
 
 model PriceHistory {

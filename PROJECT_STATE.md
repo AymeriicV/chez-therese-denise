@@ -39,6 +39,7 @@ Pour reprendre apres interruption:
 - [x] 18 - Archivage factures fournisseurs et OCR guide par fournisseur
 - [x] 19 - Refonte UX/UI premium du module fiches techniques
 - [x] 20 - Dashboard reel, analytics et parametres entreprise
+- [x] 21 - Preparation integration L'Addition dans les parametres
 
 ## Modules cible
 
@@ -46,7 +47,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-Dashboard reel, analytics et parametres entreprise.
+Preparation integration L'Addition dans les parametres.
 
 ## Commandes etape 02
 
@@ -150,6 +151,13 @@ docker compose up --build -d
 - La migration ajoute aussi les champs entreprise necessaires sur `Restaurant` pour adresser, contact, TVA, logo et horaires.
 - La page dashboard et la page analytics restent alimentees uniquement par l'API et par les donnees du restaurant courant.
 - Le frontend appelle maintenant directement l'API configuree via `NEXT_PUBLIC_API_URL`, sans proxy Next instable, pour eviter les faux `Connexion API impossible`.
+
+## Etape 21 - Details
+
+- La section `Parametres > Integrations > L'Addition` expose maintenant les vrais champs de configuration: API key, restaurant ID, URL API, statut de connexion et derniere synchronisation.
+- Trois actions sont preparees dans l'API et l'UI: test de configuration, synchronisation manuelle des ventes et desactivation de l'integration.
+- Les modeles `IntegrationCredential`, `SalesImport`, `SalesTicket` et `SalesTicketLine` sont ajoutes pour preparer le stockage des ventes L'Addition, des prochaines analyses CA, des ventes par fiche technique et des previsions.
+- Aucun appel vers l'API L'Addition n'est lance tant que la documentation exacte n'est pas disponible; le flux reste local, audit trail inclus, et pret pour une vraie synchro plus tard.
 
 ## Validation etape 18
 

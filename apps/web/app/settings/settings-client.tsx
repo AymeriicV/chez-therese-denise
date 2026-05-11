@@ -2,7 +2,7 @@
 
 import type { ComponentType, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Printer, Save, Shield, Settings as SettingsIcon, Trash2, TrendingUp, Truck } from "lucide-react";
+import { CheckCircle2, Clock3, Loader2, Plus, Power, Printer, RefreshCw, Save, Shield, Settings as SettingsIcon, Trash2, TrendingUp, Truck } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Topbar } from "@/components/shell/topbar";
 import { Button } from "@/components/ui/button";
@@ -53,15 +53,23 @@ type SettingsSnapshot = {
       notify_dashboard: boolean;
     };
     integrations: {
-      ladition: {
-        enabled: boolean;
-        api_url: string;
-        api_key: string;
-        status: string;
-      };
+      addition: AdditionIntegration;
+      ladition: AdditionIntegration;
     };
     printers: Array<PrinterConfig>;
   };
+};
+
+type AdditionIntegration = {
+  enabled: boolean;
+  api_url: string;
+  api_key: string;
+  restaurant_id: string;
+  connection_status: string;
+  status: string;
+  last_tested_at: string | null;
+  last_sync_at: string | null;
+  last_error: string | null;
 };
 
 type PrinterConfig = {
@@ -72,6 +80,8 @@ type PrinterConfig = {
   format: string;
   is_default: boolean;
 };
+
+type IntegrationActionState = "idle" | "loading" | "success" | "error";
 
 const roleMatrix = [
   { role: "OWNER", modules: "Tous les modules et toutes les corrections" },
@@ -85,6 +95,8 @@ export function SettingsClient() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [integrationActionState, setIntegrationActionState] = useState<IntegrationActionState>("idle");
+  const [integrationActionMessage, setIntegrationActionMessage] = useState("");
 
   const [restaurantName, setRestaurantName] = useState("");
   const [legalName, setLegalName] = useState("");
@@ -112,6 +124,11 @@ export function SettingsClient() {
   const [additionEnabled, setAdditionEnabled] = useState(false);
   const [additionApiUrl, setAdditionApiUrl] = useState("");
   const [additionApiKey, setAdditionApiKey] = useState("");
+  const [additionRestaurantId, setAdditionRestaurantId] = useState("");
+  const [additionConnectionStatus, setAdditionConnectionStatus] = useState("INACTIF");
+  const [additionLastTestedAt, setAdditionLastTestedAt] = useState<string | null>(null);
+  const [additionLastSyncAt, setAdditionLastSyncAt] = useState<string | null>(null);
+  const [additionLastError, setAdditionLastError] = useState<string | null>(null);
   const [printers, setPrinters] = useState<PrinterConfig[]>([]);
 
   useEffect(() => {
@@ -122,34 +139,7 @@ export function SettingsClient() {
       try {
         const snapshot = await apiRequest<SettingsSnapshot>("/settings/company");
         if (!mounted) return;
-        setData(snapshot);
-        setRestaurantName(snapshot.restaurant.name ?? "");
-        setLegalName(snapshot.restaurant.legal_name ?? "");
-        setAddress(snapshot.restaurant.address ?? "");
-        setPhone(snapshot.restaurant.phone ?? "");
-        setEmail(snapshot.restaurant.email ?? "");
-        setSiret(snapshot.restaurant.siret ?? "");
-        setVatNumber(snapshot.restaurant.vat_number ?? "");
-        setLogoUrl(snapshot.restaurant.logo_url ?? "");
-        setOpeningHours(JSON.stringify(snapshot.restaurant.opening_hours ?? {}, null, 2));
-        setBrandName(snapshot.company.brand_name ?? "");
-        setInvoiceEmail(snapshot.company.invoice_email ?? "");
-        setHaccpManager(snapshot.company.haccp_manager ?? "");
-        setTemperatureSchedule(JSON.stringify(snapshot.settings.haccp.temperature_schedule ?? [], null, 2));
-        setCleaningTasks(JSON.stringify(snapshot.settings.haccp.cleaning_tasks ?? [], null, 2));
-        setUnitsText((snapshot.settings.stock.units ?? []).join(", "));
-        setCategoriesText((snapshot.settings.stock.categories ?? []).join(", "));
-        setStorageAreasText((snapshot.settings.stock.storage_areas ?? []).join(", "));
-        setDefaultReorderPoint(snapshot.settings.stock.default_reorder_point ?? "0");
-        setOcrMode(snapshot.settings.invoices.ocr_mode ?? "hybrid");
-        setConfidenceThreshold(String(snapshot.settings.invoices.confidence_threshold ?? 0.75));
-        setPriceAlertEnabled(Boolean(snapshot.settings.price_alerts.enabled));
-        setPriceAlertThreshold(snapshot.settings.price_alerts.threshold_percent ?? "0.05");
-        setNotifyDashboard(Boolean(snapshot.settings.price_alerts.notify_dashboard));
-        setAdditionEnabled(Boolean(snapshot.settings.integrations.ladition.enabled));
-        setAdditionApiUrl(snapshot.settings.integrations.ladition.api_url ?? "");
-        setAdditionApiKey(snapshot.settings.integrations.ladition.api_key ?? "");
-        setPrinters(snapshot.settings.printers ?? []);
+        hydrateSnapshot(snapshot);
       } catch (err) {
         if (mounted) setError(err instanceof Error ? err.message : authHint());
       } finally {
@@ -163,6 +153,43 @@ export function SettingsClient() {
   }, []);
 
   const printerCount = useMemo(() => printers.length, [printers]);
+
+  function hydrateSnapshot(snapshot: SettingsSnapshot) {
+    setData(snapshot);
+    setRestaurantName(snapshot.restaurant.name ?? "");
+    setLegalName(snapshot.restaurant.legal_name ?? "");
+    setAddress(snapshot.restaurant.address ?? "");
+    setPhone(snapshot.restaurant.phone ?? "");
+    setEmail(snapshot.restaurant.email ?? "");
+    setSiret(snapshot.restaurant.siret ?? "");
+    setVatNumber(snapshot.restaurant.vat_number ?? "");
+    setLogoUrl(snapshot.restaurant.logo_url ?? "");
+    setOpeningHours(JSON.stringify(snapshot.restaurant.opening_hours ?? {}, null, 2));
+    setBrandName(snapshot.company.brand_name ?? "");
+    setInvoiceEmail(snapshot.company.invoice_email ?? "");
+    setHaccpManager(snapshot.company.haccp_manager ?? "");
+    setTemperatureSchedule(JSON.stringify(snapshot.settings.haccp.temperature_schedule ?? [], null, 2));
+    setCleaningTasks(JSON.stringify(snapshot.settings.haccp.cleaning_tasks ?? [], null, 2));
+    setUnitsText((snapshot.settings.stock.units ?? []).join(", "));
+    setCategoriesText((snapshot.settings.stock.categories ?? []).join(", "));
+    setStorageAreasText((snapshot.settings.stock.storage_areas ?? []).join(", "));
+    setDefaultReorderPoint(snapshot.settings.stock.default_reorder_point ?? "0");
+    setOcrMode(snapshot.settings.invoices.ocr_mode ?? "hybrid");
+    setConfidenceThreshold(String(snapshot.settings.invoices.confidence_threshold ?? 0.75));
+    setPriceAlertEnabled(Boolean(snapshot.settings.price_alerts.enabled));
+    setPriceAlertThreshold(snapshot.settings.price_alerts.threshold_percent ?? "0.05");
+    setNotifyDashboard(Boolean(snapshot.settings.price_alerts.notify_dashboard));
+    const addition = snapshot.settings.integrations.addition ?? snapshot.settings.integrations.ladition;
+    setAdditionEnabled(Boolean(addition.enabled));
+    setAdditionApiUrl(addition.api_url ?? "");
+    setAdditionApiKey(addition.api_key ?? "");
+    setAdditionRestaurantId(addition.restaurant_id ?? "");
+    setAdditionConnectionStatus(addition.connection_status ?? addition.status ?? "INACTIF");
+    setAdditionLastTestedAt(addition.last_tested_at ?? null);
+    setAdditionLastSyncAt(addition.last_sync_at ?? null);
+    setAdditionLastError(addition.last_error ?? null);
+    setPrinters(snapshot.settings.printers ?? []);
+  }
 
   function addPrinter() {
     setPrinters((current) => [
@@ -184,6 +211,12 @@ export function SettingsClient() {
 
   function removePrinter(index: number) {
     setPrinters((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  async function refreshSettings() {
+    const snapshot = await apiRequest<SettingsSnapshot>("/settings/company");
+    hydrateSnapshot(snapshot);
+    return snapshot;
   }
 
   async function save() {
@@ -227,11 +260,27 @@ export function SettingsClient() {
             notify_dashboard: notifyDashboard,
           },
           integrations: {
+            addition: {
+              enabled: additionEnabled,
+              api_url: additionApiUrl.trim(),
+              api_key: additionApiKey.trim(),
+              restaurant_id: additionRestaurantId.trim(),
+              connection_status: additionConnectionStatus || (additionEnabled ? "A TESTER" : "INACTIF"),
+              status: additionConnectionStatus || (additionEnabled ? "A TESTER" : "INACTIF"),
+              last_tested_at: additionLastTestedAt,
+              last_sync_at: additionLastSyncAt,
+              last_error: additionLastError,
+            },
             ladition: {
               enabled: additionEnabled,
               api_url: additionApiUrl.trim(),
               api_key: additionApiKey.trim(),
-              status: additionEnabled ? "A TESTER" : "INACTIF",
+              restaurant_id: additionRestaurantId.trim(),
+              connection_status: additionConnectionStatus || (additionEnabled ? "A TESTER" : "INACTIF"),
+              status: additionConnectionStatus || (additionEnabled ? "A TESTER" : "INACTIF"),
+              last_tested_at: additionLastTestedAt,
+              last_sync_at: additionLastSyncAt,
+              last_error: additionLastError,
             },
           },
           printers,
@@ -241,12 +290,36 @@ export function SettingsClient() {
         method: "PATCH",
         body: JSON.stringify(payload),
       });
-      setData(snapshot);
+      hydrateSnapshot(snapshot);
       setSuccess("Paramètres enregistrés.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Enregistrement impossible");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function runIntegrationAction(action: "test" | "sync" | "disable") {
+    setIntegrationActionState("loading");
+    setIntegrationActionMessage("");
+    setError("");
+    setSuccess("");
+    try {
+      const snapshot = await apiRequest<SettingsSnapshot>(`/integrations/addition/${action}`, {
+        method: "POST",
+      });
+      hydrateSnapshot(snapshot);
+      setIntegrationActionState("success");
+      setIntegrationActionMessage(
+        action === "test"
+          ? "Test de configuration enregistré."
+          : action === "sync"
+            ? "Synchronisation manuelle enregistrée."
+            : "Intégration désactivée.",
+      );
+    } catch (err) {
+      setIntegrationActionState("error");
+      setIntegrationActionMessage(err instanceof Error ? err.message : "Action impossible");
     }
   }
 
@@ -351,19 +424,57 @@ export function SettingsClient() {
               </Grid>
             </Card>
 
-            <Card className="p-5">
+            <Card className="p-5 xl:col-span-2">
               <SectionTitle icon={Truck} title="L'Addition" subtitle="Préparation de l'intégration caisse" />
-              <Grid>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={additionEnabled} onChange={(event) => setAdditionEnabled(event.target.checked)} />
-                  <span>Activer la section L'Addition</span>
-                </label>
-                <TextField label="URL API" value={additionApiUrl} onChange={setAdditionApiUrl} className="xl:col-span-2" />
-                <TextField label="API key / token" value={additionApiKey} onChange={setAdditionApiKey} className="xl:col-span-2" />
-              </Grid>
+              <div className="mt-4 grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
+                <div className="grid gap-3">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <TextField label="URL API" value={additionApiUrl} onChange={setAdditionApiUrl} />
+                    <TextField label="API key" value={additionApiKey} onChange={setAdditionApiKey} />
+                    <TextField label="Restaurant ID" value={additionRestaurantId} onChange={setAdditionRestaurantId} />
+                    <label className="flex items-center gap-2 rounded-md border border-border px-3 py-3 text-sm">
+                      <input type="checkbox" checked={additionEnabled} onChange={(event) => setAdditionEnabled(event.target.checked)} />
+                      <span>Activer l'intégration L'Addition</span>
+                    </label>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <StatusCard title="Statut connexion" value={additionConnectionStatus} icon={CheckCircle2} />
+                    <StatusCard title="Dernier test" value={formatDateTime(additionLastTestedAt)} icon={Clock3} />
+                    <StatusCard title="Dernière synchronisation" value={formatDateTime(additionLastSyncAt)} icon={RefreshCw} />
+                  </div>
+                  {additionLastError ? <p className="rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground">{additionLastError}</p> : null}
+                </div>
+                <div className="flex flex-col gap-3">
+                  <Button variant="secondary" onClick={() => void runIntegrationAction("test")} disabled={integrationActionState === "loading"}>
+                    {integrationActionState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    Tester la connexion
+                  </Button>
+                  <Button variant="secondary" onClick={() => void runIntegrationAction("sync")} disabled={integrationActionState === "loading"}>
+                    {integrationActionState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    Synchroniser les ventes
+                  </Button>
+                  <Button variant="secondary" onClick={() => void runIntegrationAction("disable")} disabled={integrationActionState === "loading"}>
+                    {integrationActionState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+                    Désactiver l'intégration
+                  </Button>
+                  {integrationActionMessage ? (
+                    <p
+                      className={`rounded-md px-3 py-2 text-sm ${
+                        integrationActionState === "error"
+                          ? "border border-red-500/30 bg-red-500/10 text-red-200"
+                          : integrationActionState === "success"
+                            ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                            : "border border-border bg-muted text-foreground"
+                      }`}
+                    >
+                      {integrationActionMessage}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
             </Card>
 
-            <Card className="p-5">
+            <Card className="p-5 xl:col-span-2">
               <SectionTitle icon={Printer} title="Impression étiquettes" subtitle="Préparation des imprimantes restaurant" />
               <div className="mt-4 flex items-center gap-2">
                 <Button variant="secondary" onClick={addPrinter}>
@@ -413,6 +524,18 @@ function SectionTitle({ icon: Icon, title, subtitle }: { icon: ComponentType<{ c
         <h2 className="text-base font-semibold">{title}</h2>
         <p className="text-xs text-foreground/55">{subtitle}</p>
       </div>
+    </div>
+  );
+}
+
+function StatusCard({ title, value, icon: Icon }: { title: string; value: string; icon: ComponentType<{ className?: string }> }) {
+  return (
+    <div className="rounded-md border border-border px-3 py-3 text-sm">
+      <div className="flex items-center gap-2 text-xs text-foreground/55">
+        <Icon className="h-3.5 w-3.5" />
+        <span>{title}</span>
+      </div>
+      <p className="mt-1 font-medium">{value}</p>
     </div>
   );
 }
@@ -474,4 +597,11 @@ function splitCsv(value: string) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return "Jamais";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Jamais";
+  return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }

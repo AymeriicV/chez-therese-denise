@@ -158,8 +158,8 @@ export const modules = [
   {
     href: "/ladition",
     title: "Synchronisation caisse L'Addition",
-    description: "Import ventes, mix produits, rapprochement recettes et données analytics.",
-    status: "Connecteur à implémenter",
+    description: "Configuration, statut et préparation des ventes depuis Paramètres > Intégrations.",
+    status: "Section intégrations prête",
     icon: FileSpreadsheet,
   },
   {
