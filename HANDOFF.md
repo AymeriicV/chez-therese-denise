@@ -127,6 +127,12 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Parametres restaurant: correction du `opening_hours` JSON du restaurant dans `company_settings` avec enveloppe `Json(...)` avant update Prisma.
 - Parametres restaurant: la sauvegarde du module `/settings` ne doit plus tomber en `Connexion API impossible` quand on modifie les infos du restaurant.
 
+## Derniere correction
+
+- HACCP: les controles de nettoyage sont maintenant generes a partir de `settings.haccp.cleaning_tasks`.
+- HACCP: le champ `days` des taches de nettoyage dans les parametres est pris en compte pour les dates reelles.
+- HACCP: les tâches du jour sont réconciliées avec la configuration restaurant et les tâches obsoletes du jour sont archivees automatiquement.
+
 ## Prochaine reprise
 
 Continuer avec commandes fournisseurs, ou reprendre sous-recettes avancees, couts matieres, marges et allergenes consolides. Garder la meme regle: aucun bouton decoratif, mutations branchees API, erreurs visibles et state UI mis a jour depuis les reponses backend.

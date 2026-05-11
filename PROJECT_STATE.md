@@ -508,3 +508,9 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - Correction du module `/settings`: le champ JSON `restaurant.opening_hours` etait envoye a Prisma sans wrapper JSON, ce qui provoquait une erreur lors de la modification des informations du restaurant.
 - Le service `company_settings` enveloppe maintenant `openingHours` avec `Json(...)` avant `db.restaurant.update(...)`.
 - La sauvegarde des parametres restaurant et de l'integration L'Addition repond maintenant correctement sur la route `/settings/company`.
+
+## Etape 20 - HACCP synchronise sur les parametres
+
+- Les tâches de nettoyage HACCP sont maintenant générees a partir de `settings.haccp.cleaning_tasks` au lieu d'un catalogue code en dur uniquement.
+- Les jours de recurrence du JSON `days` sont pris en compte par la génération quotidienne des contrôles.
+- Quand on ouvre `/haccp`, les tâches existantes du jour sont réconciliées avec la configuration restaurant et les tâches obsoletes du jour sont archivees automatiquement.

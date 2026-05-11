@@ -16,6 +16,7 @@ from app.models.schemas import (
 )
 from app.routers.deps import get_restaurant_context, require_roles
 from app.services.audit import write_audit_log
+from app.services.company_settings import get_company_settings_snapshot
 
 router = APIRouter(prefix="/quality", tags=["haccp"])
 
@@ -723,7 +724,11 @@ async def ensure_restaurant_quality_defaults(restaurant_id: str):
 
 
 async def ensure_haccp_daily_tasks(restaurant_id: str, target_date: date):
-    for task in _cleaning_occurrences_for_date(target_date):
+    cleaning_rules = await _cleaning_rules_for_restaurant(restaurant_id)
+    occurrences = _cleaning_occurrences_for_date(target_date, cleaning_rules)
+    active_template_keys = {task["template_key"] for task in occurrences}
+    active_titles = {task["title"] for task in occurrences}
+    for task in occurrences:
         exists = await db.haccptask.find_first(
             where={
                 "restaurantId": restaurant_id,
@@ -757,6 +762,28 @@ async def ensure_haccp_daily_tasks(restaurant_id: str, target_date: date):
         else:
             await db.haccptask.create(data=data)
 
+    legacy_tasks = await db.haccptask.find_many(
+        where={
+            "restaurantId": restaurant_id,
+            "category": "Nettoyage",
+            "scheduledForDate": _utc_day_start(target_date),
+            "isArchived": False,
+        }
+    )
+    for task in legacy_tasks:
+        if task.templateKey and task.templateKey in active_template_keys:
+            continue
+        if not task.templateKey and task.title in active_titles:
+            continue
+        await db.haccptask.update(
+            where={"id": task.id},
+            data={
+                "isArchived": True,
+                "archivedAt": datetime.now(UTC),
+                "notes": "Archivé automatiquement après synchronisation des paramètres HACCP",
+            },
+        )
+
 
 async def _archive_legacy_cleaning_defaults(restaurant_id: str):
     legacy_tasks = await db.haccptask.find_many(
@@ -766,7 +793,7 @@ async def _archive_legacy_cleaning_defaults(restaurant_id: str):
             "scheduledForDate": None,
             "templateKey": None,
             "isArchived": False,
-            "title": {"in": [task["title"] for task in _cleaning_catalog()]},
+            "title": {"in": [task["title"] for task in _default_cleaning_catalog()]},
         }
     )
     for task in legacy_tasks:
@@ -776,28 +803,32 @@ async def _archive_legacy_cleaning_defaults(restaurant_id: str):
         )
 
 
-def _cleaning_catalog():
+def _default_cleaning_catalog():
     return [
-        {"title": "Sol", "frequency": "DAILY", "due_hour": 18, "service": None, "weekday": None},
-        {"title": "Plans de travail", "frequency": "DAILY", "due_hour": 18, "service": None, "weekday": None},
-        {"title": "Frigos", "frequency": "DAILY", "due_hour": 18, "service": None, "weekday": None},
-        {"title": "Lave-main", "frequency": "DAILY", "due_hour": 18, "service": None, "weekday": None},
-        {"title": "Plonge", "frequency": "DAILY", "due_hour": 18, "service": None, "weekday": None},
-        {"title": "Machine à plonge", "frequency": "DAILY", "due_hour": 18, "service": None, "weekday": None},
-        {"title": "Friteuse", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MIDI", "weekday": None},
-        {"title": "Friteuse", "frequency": "AFTER_SERVICE", "due_hour": 23, "service": "SOIR", "weekday": None},
-        {"title": "Piano de cuisson", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MIDI", "weekday": None},
-        {"title": "Piano de cuisson", "frequency": "AFTER_SERVICE", "due_hour": 23, "service": "SOIR", "weekday": None},
-        {"title": "Four", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MIDI", "weekday": None},
-        {"title": "Four", "frequency": "AFTER_SERVICE", "due_hour": 23, "service": "SOIR", "weekday": None},
-        {"title": "Hotte", "frequency": "WEEKLY", "due_hour": 18, "service": None, "weekday": 6},
+        {"title": "Sol", "frequency": "DAILY", "due_hour": 18, "service": None, "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Plans de travail", "frequency": "DAILY", "due_hour": 18, "service": None, "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Frigos", "frequency": "DAILY", "due_hour": 18, "service": None, "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Lave-main", "frequency": "DAILY", "due_hour": 18, "service": None, "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Plonge", "frequency": "DAILY", "due_hour": 18, "service": None, "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Machine à plonge", "frequency": "DAILY", "due_hour": 18, "service": None, "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Friteuse", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MIDI", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Friteuse", "frequency": "AFTER_SERVICE", "due_hour": 23, "service": "SOIR", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Piano de cuisson", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MIDI", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Piano de cuisson", "frequency": "AFTER_SERVICE", "due_hour": 23, "service": "SOIR", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Four", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MIDI", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Four", "frequency": "AFTER_SERVICE", "due_hour": 23, "service": "SOIR", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Hotte", "frequency": "WEEKLY", "due_hour": 18, "service": None, "days": ["SUN"]},
     ]
 
 
-def _cleaning_occurrences_for_date(target_date: date):
+def _cleaning_occurrences_for_date(target_date: date, cleaning_rules: list[dict] | None = None):
     occurrences = []
-    for rule in _cleaning_catalog():
-        if rule["frequency"] == "WEEKLY" and target_date.weekday() != rule["weekday"]:
+    weekday_code = _weekday_code(target_date.weekday())
+    for rule in cleaning_rules or _default_cleaning_catalog():
+        days = [str(day).upper() for day in rule.get("days", []) if str(day).strip()]
+        if days and weekday_code not in days:
+            continue
+        if not days and rule["frequency"] == "WEEKLY" and weekday_code != "SUN":
             continue
         due_at = datetime.combine(target_date, time(rule["due_hour"], 0), UTC)
         service_suffix = f" - service {rule['service'].lower()}" if rule["service"] else ""
@@ -812,6 +843,46 @@ def _cleaning_occurrences_for_date(target_date: date):
             }
         )
     return occurrences
+
+
+async def _cleaning_rules_for_restaurant(restaurant_id: str) -> list[dict]:
+    try:
+        snapshot = await get_company_settings_snapshot(restaurant_id)
+        rules = snapshot.get("settings", {}).get("haccp", {}).get("cleaning_tasks", [])
+    except Exception:
+        return _default_cleaning_catalog()
+    if not isinstance(rules, list):
+        return _default_cleaning_catalog()
+    normalized: list[dict] = []
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        title = str(rule.get("title") or "").strip()
+        if not title:
+            continue
+        frequency = str(rule.get("frequency") or "DAILY").upper()
+        normalized.append(
+            {
+                "title": title,
+                "frequency": frequency,
+                "due_hour": int(rule.get("due_hour") or _default_due_hour(frequency)),
+                "service": str(rule.get("service") or "").strip().upper() or None,
+                "days": [str(day).upper() for day in (rule.get("days") or []) if str(day).strip()],
+            }
+        )
+    return normalized or _default_cleaning_catalog()
+
+
+def _default_due_hour(frequency: str) -> int:
+    if frequency == "AFTER_SERVICE":
+        return 14
+    if frequency == "WEEKLY":
+        return 18
+    return 18
+
+
+def _weekday_code(weekday: int) -> str:
+    return ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"][weekday]
 
 
 def _utc_day_start(target_date: date):
