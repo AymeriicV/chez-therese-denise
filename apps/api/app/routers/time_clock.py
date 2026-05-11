@@ -276,12 +276,9 @@ async def _sync_planning_from_time_clock(restaurant_id: str, user_id: str, clock
     day = next((item for item in getattr(schedule, "days", []) if item.weekday == local_clock_in.weekday()), None)
     clock_in_label = local_clock_in.strftime("%H:%M")
     clock_out_label = local_clock_out.strftime("%H:%M") if local_clock_out else None
-    should_create_or_update = (
-        day is None
-        or day.isDayOff
-        or (not day.morningStart and not day.eveningStart)
-    )
-    if not should_create_or_update:
+    should_create_or_update = day is None or day.isDayOff or (not day.morningStart and not day.eveningStart)
+    should_update_checkout = bool(day and clock_out_label)
+    if not should_create_or_update and not should_update_checkout:
         return
 
     day_data = {
@@ -304,6 +301,12 @@ async def _sync_planning_from_time_clock(restaurant_id: str, user_id: str, clock
     elif not day:
         day_data["morningStart"] = clock_in_label
         day_data["morningEnd"] = clock_out_label
+    elif clock_out_label:
+        target_field = _planning_checkout_field(day, local_clock_in, local_clock_out)
+        if target_field and _should_replace_checkout(getattr(day, target_field, None), clock_out_label):
+            day_data[target_field] = clock_out_label
+        else:
+            return
 
     existing = None
     if day:
@@ -317,3 +320,38 @@ async def _sync_planning_from_time_clock(restaurant_id: str, user_id: str, clock
 def _week_start(reference_date):
     monday = reference_date - timedelta(days=reference_date.weekday())
     return datetime.combine(monday, datetime.min.time(), UTC)
+
+
+def _planning_checkout_field(day, local_clock_in: datetime, local_clock_out: datetime | None):
+    if not local_clock_out:
+        return None
+    if getattr(day, "eveningStart", None) or getattr(day, "eveningEnd", None):
+        evening_start = _minutes_from_label(getattr(day, "eveningStart", None))
+        if evening_start is None:
+            return "eveningEnd"
+        if _minutes_from_label(local_clock_out.strftime("%H:%M")) >= evening_start:
+            return "eveningEnd"
+        return "morningEnd"
+    if _minutes_from_label(local_clock_in.strftime("%H:%M")) >= 12 * 60:
+        return "eveningEnd"
+    return "morningEnd"
+
+
+def _should_replace_checkout(existing_label: str | None, new_label: str) -> bool:
+    if not existing_label:
+        return True
+    existing_minutes = _minutes_from_label(existing_label)
+    new_minutes = _minutes_from_label(new_label)
+    if existing_minutes is None or new_minutes is None:
+        return True
+    return new_minutes > existing_minutes
+
+
+def _minutes_from_label(label: str | None):
+    if not label or ":" not in label:
+        return None
+    try:
+        hours, minutes = label.split(":", 1)
+        return int(hours) * 60 + int(minutes)
+    except Exception:
+        return None
