@@ -4,14 +4,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatParisDate } from "@/lib/time";
 
 function formatToday() {
-  return new Intl.DateTimeFormat("fr-FR", {
+  return formatParisDate(new Date(), {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(new Date());
+  });
 }
 
 export function Topbar() {

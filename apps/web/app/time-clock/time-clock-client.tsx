@@ -7,6 +7,7 @@ import { Topbar } from "@/components/shell/topbar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { apiRequest, authHint, getSessionRole } from "@/lib/api";
+import { formatParisDateTime, formatParisTime, parisDateInput, parisDateKey } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
 type Entry = {
@@ -74,7 +75,7 @@ export function TimeClockClient() {
   const role = getSessionRole();
   const isEmployee = role === "EMPLOYEE";
   const latestOpen = entries.find((entry) => entry.is_open) ?? null;
-  const todayEntries = useMemo(() => entries.filter((entry) => entry.clock_in.slice(0, 10) === new Date().toISOString().slice(0, 10)), [entries]);
+  const todayEntries = useMemo(() => entries.filter((entry) => parisDateKey(entry.clock_in) === parisDateInput()), [entries]);
   const selectedEntries = useMemo(
     () => (selectedEmployeeId ? entries.filter((entry) => entry.employee_id === selectedEmployeeId) : entries).slice(0, 20),
     [entries, selectedEmployeeId],
@@ -93,7 +94,7 @@ export function TimeClockClient() {
   }, []);
 
   useEffect(() => {
-    const update = () => setNowLabel(new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    const update = () => setNowLabel(formatParisTime(new Date()));
     update();
     const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
@@ -131,7 +132,7 @@ export function TimeClockClient() {
     try {
       const entry = await apiRequest<Entry>("/time-clock/punch-in", { method: "POST" });
       setEntries((current) => [entry, ...current.filter((item) => item.id !== entry.id)]);
-      setLastBadgeTime(new Date(entry.clock_in).toLocaleString("fr-FR"));
+      setLastBadgeTime(formatParisDateTime(entry.clock_in));
       setSuccess("Arrivée enregistrée.");
       await loadEntries();
     } catch (err) {
@@ -148,7 +149,7 @@ export function TimeClockClient() {
     try {
       const entry = await apiRequest<Entry>("/time-clock/punch-out", { method: "POST" });
       setEntries((current) => [entry, ...current.filter((item) => item.id !== entry.id)]);
-      setLastBadgeTime(new Date(entry.clock_out || entry.clock_in).toLocaleString("fr-FR"));
+      setLastBadgeTime(formatParisDateTime(entry.clock_out || entry.clock_in));
       setSuccess("Départ enregistré.");
       await loadEntries();
     } catch (err) {
@@ -185,7 +186,7 @@ export function TimeClockClient() {
       setEntries((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
       setForm(emptyCorrection);
       setSelectedEmployeeId(saved.employee_id);
-      setLastBadgeTime(new Date(saved.clock_in).toLocaleString("fr-FR"));
+      setLastBadgeTime(formatParisDateTime(saved.clock_in));
       setSuccess("Correction enregistrée.");
       await loadEntries();
     } catch (err) {
@@ -277,8 +278,8 @@ export function TimeClockClient() {
                 })}>
                   <div className="min-w-0">
                     <p className="text-sm font-medium">{entry.employee_name}</p>
-                    <p className="text-xs text-foreground/55">Heure initiale: {new Date(entry.clock_in).toLocaleString("fr-FR")}</p>
-                    <p className="text-xs text-foreground/55">Heure badgée: {entry.clock_out ? new Date(entry.clock_out).toLocaleString("fr-FR") : "En cours"}</p>
+                    <p className="text-xs text-foreground/55">Heure initiale: {formatParisDateTime(entry.clock_in)}</p>
+                    <p className="text-xs text-foreground/55">Heure badgée: {entry.clock_out ? formatParisDateTime(entry.clock_out) : "En cours"}</p>
                     <p className="mt-1 text-xs text-foreground/55">{entry.position ?? "Poste non renseigné"} - {entry.worked_minutes} min</p>
                     {entry.corrections.length > 0 ? <p className="mt-1 text-xs text-foreground/55">Corrections: {entry.corrections.length}</p> : null}
                   </div>
@@ -312,7 +313,7 @@ export function TimeClockClient() {
                   <select className="h-10 rounded-md border border-border bg-background px-3" value={form.entry_id} onChange={(event) => setForm({ ...form, entry_id: event.target.value })}>
                     <option value="">Créer un pointage manquant</option>
                     {entries.filter((entry) => !form.employee_id || entry.employee_id === form.employee_id).map((entry) => (
-                      <option key={entry.id} value={entry.id}>{entry.employee_name} - {new Date(entry.clock_in).toLocaleString("fr-FR")}</option>
+                      <option key={entry.id} value={entry.id}>{entry.employee_name} - {formatParisDateTime(entry.clock_in)}</option>
                     ))}
                   </select>
                 </label>

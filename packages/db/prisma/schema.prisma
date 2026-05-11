@@ -644,6 +644,8 @@ model PlanningScheduleDay {
   weekday           Int
   morningStart      String?
   morningEnd        String?
+  actualStart       String?
+  actualEnd         String?
   breakMinutes      Int               @default(0)
   eveningStart      String?
   eveningEnd        String?

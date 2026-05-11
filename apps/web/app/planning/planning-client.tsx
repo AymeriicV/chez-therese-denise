@@ -19,17 +19,23 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { apiRequest, authHint, getSessionRole } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { formatParisDate, parisDateInput, shiftParisDateInput, weekStartFromParisDateInput } from "@/lib/time";
 
 type PlanningDayCell = {
   id: string;
   weekday: number;
   morning_start: string | null;
   morning_end: string | null;
+  actual_start: string | null;
+  actual_end: string | null;
   break_minutes: number;
   evening_start: string | null;
   evening_end: string | null;
   is_day_off: boolean;
   comment: string | null;
+  planned_minutes: number;
+  actual_minutes: number;
+  difference_minutes: number;
   total_minutes: number;
 };
 
@@ -51,6 +57,8 @@ type PlanningRow = {
   weekly_target_minutes: number;
   comment: string;
   is_day_off: boolean;
+  planned_week_minutes: number;
+  actual_week_minutes: number;
   total_week_minutes: number;
   exceeds_objective: boolean;
   days: PlanningRowDay[];
@@ -92,23 +100,12 @@ const WEEKDAY_LABELS = [
   { weekday: 6, label: "Dimanche" },
 ];
 
-function localDateInput(value = new Date()) {
-  const offset = value.getTimezoneOffset();
-  const local = new Date(value.getTime() - offset * 60_000);
-  return local.toISOString().slice(0, 10);
-}
-
 function shiftDate(value: string, deltaDays: number) {
-  const next = new Date(`${value}T12:00:00`);
-  next.setDate(next.getDate() + deltaDays);
-  return localDateInput(next);
+  return shiftParisDateInput(value, deltaDays);
 }
 
 function toWeekStart(value: string) {
-  const date = new Date(`${value}T12:00:00`);
-  const monday = new Date(date);
-  monday.setDate(date.getDate() - date.getDay() + (date.getDay() === 0 ? -6 : 1));
-  return localDateInput(monday);
+  return weekStartFromParisDateInput(value);
 }
 
 function minutesToLabel(totalMinutes: number) {
@@ -131,7 +128,7 @@ function normalizeTime(value: string) {
 export function PlanningClient() {
   const role = getSessionRole();
   const canEdit = role === "OWNER";
-  const [targetDate, setTargetDate] = useState(localDateInput());
+  const [targetDate, setTargetDate] = useState(parisDateInput());
   const [data, setData] = useState<PlanningData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -139,10 +136,10 @@ export function PlanningClient() {
   const [success, setSuccess] = useState("");
   const [selected, setSelected] = useState<EditorForm | null>(null);
   const [copying, setCopying] = useState(false);
-  const [sourceDate, setSourceDate] = useState(localDateInput());
-  const [targetCopyDate, setTargetCopyDate] = useState(shiftDate(localDateInput(), 1));
-  const [duplicateSourceDate, setDuplicateSourceDate] = useState(localDateInput());
-  const [duplicateTargetDate, setDuplicateTargetDate] = useState(shiftDate(localDateInput(), 1));
+  const [sourceDate, setSourceDate] = useState(parisDateInput());
+  const [targetCopyDate, setTargetCopyDate] = useState(shiftDate(parisDateInput(), 1));
+  const [duplicateSourceDate, setDuplicateSourceDate] = useState(parisDateInput());
+  const [duplicateTargetDate, setDuplicateTargetDate] = useState(shiftDate(parisDateInput(), 1));
 
   useEffect(() => {
     void loadPlanning(targetDate);
@@ -150,7 +147,7 @@ export function PlanningClient() {
 
   const weekLabel = useMemo(() => {
     if (!data) return "";
-    return `${new Date(`${data.week_start}T12:00:00`).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })} au ${new Date(`${data.week_end}T12:00:00`).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}`;
+    return `${formatParisDate(data.week_start, { day: "2-digit", month: "long", year: "numeric" })} au ${formatParisDate(data.week_end, { day: "2-digit", month: "long", year: "numeric" })}`;
   }, [data]);
 
   async function loadPlanning(nextTargetDate?: string) {
@@ -285,7 +282,7 @@ export function PlanningClient() {
                 <CalendarDays className="h-4 w-4" />
                 Semaine précédente
               </Button>
-              <Button variant="secondary" onClick={() => setTargetDate(localDateInput())}>
+              <Button variant="secondary" onClick={() => setTargetDate(parisDateInput())}>
                 Aujourd’hui
               </Button>
               <Button variant="secondary" onClick={() => setTargetDate(shiftDate(targetDate, 7))}>
@@ -397,8 +394,11 @@ export function PlanningClient() {
                               <DayCellCard row={row} day={day} canEdit={canEdit} onOpen={() => openEditor(row, day)} />
                             </Td>
                           ))}
-                          <Td className="min-w-[120px]">
-                            <strong className={cn("text-sm", row.exceeds_objective ? "text-red-600 dark:text-red-400" : "text-foreground")}>{minutesToLabel(row.total_week_minutes)}</strong>
+                          <Td className="min-w-[160px]">
+                            <div className="space-y-1 text-sm">
+                              <p className={cn("font-semibold", row.exceeds_objective ? "text-red-600 dark:text-red-400" : "text-foreground")}>Réel {minutesToLabel(row.actual_week_minutes)}</p>
+                              <p className="text-xs text-foreground/55">Prévu {minutesToLabel(row.planned_week_minutes)}</p>
+                            </div>
                           </Td>
                           <Td className="min-w-[120px]">
                             <span className={cn("rounded-full px-2 py-1 text-xs", row.exceeds_objective ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" : "bg-muted text-foreground")}>
@@ -438,7 +438,8 @@ export function PlanningClient() {
                       <p className="text-sm text-foreground/55">{row.position}</p>
                     </div>
                     <div className="text-right">
-                      <p className={cn("text-sm font-medium", row.exceeds_objective ? "text-red-600 dark:text-red-400" : "text-foreground")}>{minutesToLabel(row.total_week_minutes)}</p>
+                      <p className={cn("text-sm font-medium", row.exceeds_objective ? "text-red-600 dark:text-red-400" : "text-foreground")}>Réel {minutesToLabel(row.actual_week_minutes)}</p>
+                      <p className="text-xs text-foreground/55">Prévu {minutesToLabel(row.planned_week_minutes)}</p>
                       <p className="text-xs text-foreground/55">Objectif {row.weekly_target_minutes ? minutesToLabel(row.weekly_target_minutes) : "non défini"}</p>
                     </div>
                   </div>
@@ -453,7 +454,7 @@ export function PlanningClient() {
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <p className="text-sm font-medium">{day.label}</p>
-                            <p className="text-xs text-foreground/55">{new Date(`${day.date}T12:00:00`).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</p>
+                            <p className="text-xs text-foreground/55">{formatParisDate(day.date, { day: "2-digit", month: "short" })}</p>
                           </div>
                           {day.cell?.is_day_off ? <span className="rounded-full bg-red-100 px-2 py-1 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">REPOS</span> : <span className="rounded-full bg-muted px-2 py-1 text-xs">{minutesToLabel(day.total_minutes)}</span>}
                         </div>
@@ -462,9 +463,14 @@ export function PlanningClient() {
                             <p>Journée de repos</p>
                           ) : day.cell ? (
                             <>
-                              <p>Matin: {timeRangeLabel(day.cell.morning_start, day.cell.morning_end)}</p>
+                              <p>Prévu: {plannedRangeLabel(day.cell)}</p>
+                              <p>Réel: {actualRangeLabel(day.cell)}</p>
                               <p>Pause: {day.cell.break_minutes} min</p>
-                              <p>Soir: {timeRangeLabel(day.cell.evening_start, day.cell.evening_end)}</p>
+                              {day.cell.actual_start && day.cell.actual_end ? (
+                                <p className={cn("font-medium", day.cell.difference_minutes < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400")}>
+                                  Écart: {day.cell.difference_minutes === 0 ? "0h00" : `${day.cell.difference_minutes > 0 ? "+" : "-"}${minutesToLabel(Math.abs(day.cell.difference_minutes))}`}
+                                </p>
+                              ) : null}
                               <p>Total jour: {minutesToLabel(day.total_minutes)}</p>
                             </>
                           ) : (
@@ -505,6 +511,20 @@ function buildEditorForm(row: PlanningRow, day: PlanningRowDay, weekStart: strin
   };
 }
 
+function plannedRangeLabel(cell: PlanningDayCell) {
+  const parts = [timeRangeLabel(cell.morning_start, cell.morning_end)];
+  if (cell.evening_start || cell.evening_end) {
+    parts.push(timeRangeLabel(cell.evening_start, cell.evening_end));
+  }
+  return parts.join(" · ");
+}
+
+function actualRangeLabel(cell: PlanningDayCell) {
+  if (!cell.actual_start && !cell.actual_end) return "En attente";
+  if (cell.actual_start && !cell.actual_end) return `${cell.actual_start} - En cours`;
+  return timeRangeLabel(cell.actual_start, cell.actual_end);
+}
+
 function DayCellCard({
   row,
   day,
@@ -520,7 +540,7 @@ function DayCellCard({
   const content = (
     <>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium text-foreground/55">{new Date(`${day.date}T12:00:00`).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</p>
+        <p className="text-xs font-medium text-foreground/55">{formatParisDate(day.date, { day: "2-digit", month: "short" })}</p>
         {cell?.is_day_off ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] text-red-700 dark:bg-red-950 dark:text-red-300">REPOS</span> : <span className="rounded-full bg-muted px-2 py-0.5 text-[10px]">{minutesToLabel(day.total_minutes)}</span>}
       </div>
       <div className="mt-2 grid gap-1 text-xs text-foreground/60">
@@ -528,9 +548,14 @@ function DayCellCard({
           <p>Repos</p>
         ) : cell ? (
           <>
-            <p>Matin: {timeRangeLabel(cell.morning_start, cell.morning_end)}</p>
+            <p>Prévu: {plannedRangeLabel(cell)}</p>
+            <p>Réel: {actualRangeLabel(cell)}</p>
             <p>Pause: {cell.break_minutes} min</p>
-            <p>Soir: {timeRangeLabel(cell.evening_start, cell.evening_end)}</p>
+            {cell.actual_start && cell.actual_end ? (
+              <p className={cn("font-medium", cell.difference_minutes < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400")}>
+                Écart: {cell.difference_minutes === 0 ? "0h00" : `${cell.difference_minutes > 0 ? "+" : "-"}${minutesToLabel(Math.abs(cell.difference_minutes))}`}
+              </p>
+            ) : null}
           </>
         ) : (
           <p>{canEdit ? "Cliquer pour saisir" : "Aucun créneau"}</p>

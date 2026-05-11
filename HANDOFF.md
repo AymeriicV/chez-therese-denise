@@ -144,6 +144,14 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Badgeuse -> planning: un badge sur un jour de repos crée ou reactive la cellule du jour avec l'heure badgée.
 - Badgeuse -> planning: le planning n'est pas ecrase quand un shift existe deja; la synchronisation s'active seulement si la cellule est absente, vide ou repos.
 
+## Derniere correction
+
+- Fuseau horaire aligne sur `Europe/Paris` pour la topbar, la badgeuse et le planning.
+- Le planning conserve l'horaire prevu et ajoute l'horaire reel badge sur la meme cellule, avec ecart affiche.
+- Les cellules de planning stockent `actualStart` et `actualEnd` pour garder la distinction prévu / réel.
+- La badgeuse compare les pointages avec la date Paris.
+- Le cache Next a ete purge puis le frontend redemarre apres les 500 sur `/planning` et `/time-clock`.
+
 ## Prochaine reprise
 
 Continuer avec commandes fournisseurs, ou reprendre sous-recettes avancees, couts matieres, marges et allergenes consolides. Garder la meme regle: aucun bouton decoratif, mutations branchees API, erreurs visibles et state UI mis a jour depuis les reponses backend.

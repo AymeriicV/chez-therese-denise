@@ -526,3 +526,11 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - Un pointage employé sur un jour de repos crée ou reactive la cellule planning de la journée avec l'heure badgée.
 - Le planning du jour ne reste plus a zero quand l'employe badge sur un jour sans service.
 - La synchronisation badgeuse -> planning ne remplace pas les shifts deja saisis par l'OWNER, elle n'agit que si la cellule est absente, vide ou en repos.
+
+## Etape 23 - Heure Paris et prevu/reel badgeuse
+
+- Le fuseau horaire affiché est maintenant `Europe/Paris` sur la topbar, la badgeuse et le planning.
+- Le planning conserve l'horaire prévu et ajoute l'horaire réel badge sur la même cellule, avec un écart lisible.
+- Les cellules de planning stockent désormais `actualStart` et `actualEnd` pour garder prévu et réel séparés.
+- La badgeuse compare les pointages au jour Paris, pas au jour UTC brut.
+- Le cache Next corrompu a été purgé puis le frontend redémarré pour supprimer les `500` sur `/planning` et `/time-clock`.

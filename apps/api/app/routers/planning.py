@@ -248,11 +248,17 @@ async def _serialize_employee_for_row(user, restaurant_id: str):
 def _serialize_schedule(schedule, employee, week_start: datetime):
     cells = {day.weekday: _serialize_day(day) for day in getattr(schedule, "days", [])}
     day_rows = []
-    total_week = 0
+    planned_week = 0
+    actual_week = 0
+    display_week = 0
     for weekday, label in DAYS:
         day = cells.get(weekday)
+        planned = day["planned_minutes"] if day else 0
+        actual = day["actual_minutes"] if day else 0
         total = day["total_minutes"] if day else 0
-        total_week += total
+        planned_week += planned
+        actual_week += actual
+        display_week += total
         day_rows.append(
             {
                 "weekday": weekday,
@@ -273,25 +279,34 @@ def _serialize_schedule(schedule, employee, week_start: datetime):
         "weekly_target_minutes": target,
         "comment": schedule.comment if schedule else "",
         "is_day_off": schedule.isDayOff if schedule else False,
-        "total_week_minutes": total_week,
-        "exceeds_objective": bool(target and total_week > target),
+        "planned_week_minutes": planned_week,
+        "actual_week_minutes": actual_week,
+        "total_week_minutes": display_week,
+        "exceeds_objective": bool(target and display_week > target),
         "days": day_rows,
     }
 
 
 def _serialize_day(day):
-    total = _compute_day_total(day.morningStart, day.morningEnd, day.breakMinutes, day.eveningStart, day.eveningEnd, day.isDayOff)
+    planned_minutes = _compute_day_total(day.morningStart, day.morningEnd, day.breakMinutes, day.eveningStart, day.eveningEnd, day.isDayOff)
+    actual_minutes = _compute_day_total(day.actualStart, day.actualEnd, day.breakMinutes, None, None, day.isDayOff)
+    display_minutes = actual_minutes if day.actualStart and day.actualEnd else planned_minutes
     return {
         "id": day.id,
         "weekday": day.weekday,
         "morning_start": day.morningStart,
         "morning_end": day.morningEnd,
+        "actual_start": day.actualStart,
+        "actual_end": day.actualEnd,
         "break_minutes": day.breakMinutes,
         "evening_start": day.eveningStart,
         "evening_end": day.eveningEnd,
         "is_day_off": day.isDayOff,
         "comment": day.comment,
-        "total_minutes": total,
+        "planned_minutes": planned_minutes,
+        "actual_minutes": actual_minutes,
+        "difference_minutes": actual_minutes - planned_minutes if day.actualStart and day.actualEnd else 0,
+        "total_minutes": display_minutes,
     }
 
 
