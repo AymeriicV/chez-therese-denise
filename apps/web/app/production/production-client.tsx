@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { Archive, ClipboardList, Loader2, Plus, Printer, Save } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Topbar } from "@/components/shell/topbar";
@@ -97,9 +96,7 @@ const emptyForm: FormState = {
   notes: "",
 };
 
-export function ProductionClient() {
-  const searchParams = useSearchParams();
-  const recipeIdParam = searchParams.get("recipe_id");
+export function ProductionClient({ initialRecipeId }: { initialRecipeId: string | null }) {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -150,7 +147,7 @@ export function ProductionClient() {
       setSelectedId(nextSelectedId ?? batchData[0]?.id ?? "");
       setForm((current) => ({
         ...current,
-        recipe_id: current.recipe_id || (recipeIdParam && activeRecipes.some((recipe) => recipe.id === recipeIdParam) ? recipeIdParam : activeRecipes[0]?.id || ""),
+        recipe_id: current.recipe_id || (initialRecipeId && activeRecipes.some((recipe) => recipe.id === initialRecipeId) ? initialRecipeId : activeRecipes[0]?.id || ""),
       }));
     } catch (err) {
       setError(err instanceof Error ? err.message : authHint());
