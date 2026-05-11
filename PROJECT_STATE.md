@@ -502,3 +502,9 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - Les articles stock exposes par `/inventory` retournent maintenant `average_weight_grams`, `edible_yield_rate` et `weight_source`.
 - Le moteur recette utilise la conversion piece -> kg/g pour calculer un cout ligne coherent avec la realite fournisseur.
 - L'interface stock permet de voir et de modifier ces donnees pour garder un override manuel quand c'est necessaire.
+
+## Etape 19 - Parametres restaurant
+
+- Correction du module `/settings`: le champ JSON `restaurant.opening_hours` etait envoye a Prisma sans wrapper JSON, ce qui provoquait une erreur lors de la modification des informations du restaurant.
+- Le service `company_settings` enveloppe maintenant `openingHours` avec `Json(...)` avant `db.restaurant.update(...)`.
+- La sauvegarde des parametres restaurant et de l'integration L'Addition repond maintenant correctement sur la route `/settings/company`.

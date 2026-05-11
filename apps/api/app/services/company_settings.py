@@ -240,7 +240,8 @@ async def upsert_company_settings_snapshot(
         for key, value in restaurant_update.items():
             if value is None:
                 continue
-            mapped_restaurant_update[field_map.get(key, key)] = value
+            mapped_key = field_map.get(key, key)
+            mapped_restaurant_update[mapped_key] = Json(value) if mapped_key == "openingHours" else value
         await db.restaurant.update(
             where={"id": restaurant_id},
             data=mapped_restaurant_update,

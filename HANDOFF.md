@@ -122,6 +122,11 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Produits piece -> kg/g: le stock peut etre modifie manuellement avec un poids de reference ou un override `MANUAL`.
 - Produits piece -> kg/g: le seed backfill les articles deja existants sur le reseau local.
 
+## Derniere correction
+
+- Parametres restaurant: correction du `opening_hours` JSON du restaurant dans `company_settings` avec enveloppe `Json(...)` avant update Prisma.
+- Parametres restaurant: la sauvegarde du module `/settings` ne doit plus tomber en `Connexion API impossible` quand on modifie les infos du restaurant.
+
 ## Prochaine reprise
 
 Continuer avec commandes fournisseurs, ou reprendre sous-recettes avancees, couts matieres, marges et allergenes consolides. Garder la meme regle: aucun bouton decoratif, mutations branchees API, erreurs visibles et state UI mis a jour depuis les reponses backend.
