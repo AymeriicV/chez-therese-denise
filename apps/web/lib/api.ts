@@ -1,15 +1,7 @@
 const CONFIGURED_API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 function getApiUrl() {
-  if (typeof window === "undefined") return CONFIGURED_API_URL;
-  const configured = new URL(CONFIGURED_API_URL);
-  const browserHost = window.location.hostname;
-  const configuredIsLoopback = ["localhost", "127.0.0.1", "0.0.0.0"].includes(configured.hostname);
-  const browserIsLoopback = ["localhost", "127.0.0.1", "0.0.0.0"].includes(browserHost);
-  if (configuredIsLoopback && !browserIsLoopback) {
-    configured.hostname = browserHost;
-  }
-  return configured.toString().replace(/\/$/, "");
+  return CONFIGURED_API_URL.replace(/\/$/, "");
 }
 
 export class ApiError extends Error {
@@ -142,10 +134,10 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
 
   let response: Response;
   try {
-    response = await fetch(`${getApiUrl()}/api/v1${path}`, {
-      ...options,
-      headers,
-    });
+      response = await fetch(`${getApiUrl()}/api/v1${path}`, {
+        ...options,
+        headers,
+      });
   } catch (error) {
     throw new ApiError(
       error instanceof Error && error.message !== "Failed to fetch"

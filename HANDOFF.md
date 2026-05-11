@@ -27,6 +27,7 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Les endpoints `/dashboard/overview`, `/analytics/overview`, `/analytics/price-alerts` et `/settings/company` sont branchés au backend.
 - `/ai` reste une page placeholder propre en attendant le moteur IA final.
 - Les migrations Prisma ajoutees pour ces blocs sont appliquees dans Docker.
+- Le frontend appelle maintenant directement l'API configuree dans `NEXT_PUBLIC_API_URL`; le contournement proxy Next a ete retire car il introduisait des caches dev instables.
 - Correction des faux `Failed to fetch` apres mutations: les pages utilisent l'objet retourne par l'API au lieu de transformer un refresh secondaire en erreur de sauvegarde.
 - Headers API centralises: `Authorization: Bearer <token>` et `X-Restaurant-Id` restent portes par `apiRequest`.
 - Detection automatique allergenes stock cote backend.

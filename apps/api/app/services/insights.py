@@ -155,7 +155,8 @@ async def build_analytics_overview(restaurant_id: str) -> dict:
         order={"createdAt": "desc"},
         take=100,
     )
-    stock_movements = await db.stockmovement.find_many(where={"restaurantId": restaurant_id}, include={"item": True})
+    stock_movements = await db.stockmovement.find_many(include={"item": True})
+    stock_movements = [movement for movement in stock_movements if movement.item and movement.item.restaurantId == restaurant_id]
     time_entries = await db.timeclocklog.find_many(where={"restaurantId": restaurant_id, "isArchived": False}, include={"user": True})
     planning = await db.planningschedule.find_many(where={"restaurantId": restaurant_id, "isArchived": False}, include={"days": True, "user": True})
     haccp_tasks = await db.haccptask.find_many(where={"restaurantId": restaurant_id, "isArchived": False})
@@ -207,6 +208,16 @@ def _restaurant_now(restaurant: dict) -> datetime:
 
 def _same_day(value: datetime | None, target: date) -> bool:
     return bool(value and value.date() == target)
+
+
+def _task_matches_today(task, target_day: date) -> bool:
+    scheduled = getattr(task, "scheduledForDate", None)
+    if scheduled and scheduled.date() == target_day:
+        return True
+    due_at = getattr(task, "dueAt", None)
+    if scheduled is None and due_at and due_at.date() <= target_day:
+        return True
+    return False
 
 
 def _sum_invoice_amount(invoices, start: date, end: date) -> Decimal:

@@ -270,7 +270,7 @@ class DashboardOverviewOut(BaseModel):
     kpis: dict[str, Any]
     alerts: dict[str, Any]
     quick_actions: list[dict[str, Any]]
-    chart: dict[str, Any]
+    chart: list[dict[str, Any]]
     top_suppliers: list[dict[str, Any]]
     top_price_increases: list[dict[str, Any]]
     tasks_today: list[dict[str, Any]]

@@ -149,6 +149,7 @@ docker compose up --build -d
 - `/ai` reste une page propre de mise en attente, sans moteur IA pour l'instant.
 - La migration ajoute aussi les champs entreprise necessaires sur `Restaurant` pour adresser, contact, TVA, logo et horaires.
 - La page dashboard et la page analytics restent alimentees uniquement par l'API et par les donnees du restaurant courant.
+- Le frontend appelle maintenant directement l'API configuree via `NEXT_PUBLIC_API_URL`, sans proxy Next instable, pour eviter les faux `Connexion API impossible`.
 
 ## Validation etape 18
 
