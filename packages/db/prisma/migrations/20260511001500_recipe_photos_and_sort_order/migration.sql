@@ -1,0 +1,10 @@
+-- AlterTable
+ALTER TABLE "Recipe" ADD COLUMN IF NOT EXISTS "photoName" TEXT;
+ALTER TABLE "Recipe" ADD COLUMN IF NOT EXISTS "photoMimeType" TEXT;
+ALTER TABLE "Recipe" ADD COLUMN IF NOT EXISTS "photoPath" TEXT;
+
+-- AlterTable
+ALTER TABLE "RecipeIngredient" ADD COLUMN IF NOT EXISTS "sortOrder" INTEGER NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "SubRecipeIngredient" ADD COLUMN IF NOT EXISTS "sortOrder" INTEGER NOT NULL DEFAULT 0;

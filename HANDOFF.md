@@ -46,6 +46,14 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Sidebar role-aware: l'EMPLOYEE voit seulement `Mon planning`, `Badgeuse` et `Quitter`; les modules admin sont masques et l'app redirige vers `/planning` si besoin.
 - Auth frontend: le role est decode depuis le JWT, `Authorization` et `X-Restaurant-Id` restent centralises dans `apiRequest`.
 - Module `/invoices` durci: import obligatoire apres selection du fournisseur, stockage durable du fichier original dans le volume `uploads`, preview/telchargement securises, filtres et tri, OCR guide par fournisseur, templates fournisseurs, edition des lignes, liaison stock et validation idempotente.
+- `SupplierInvoiceLine` porte maintenant `codeArticle` en base et dans la reponse API. L'UI facture l'affiche et l'edition peut le conserver.
+- L'OCR facture utilise OpenAI vision comme moteur principal quand la cle est presente, avec `gpt-5.2` comme modele par defaut. Chaque reussite GPT nourrit `SupplierInvoiceTemplate.exampleRows`, ce qui renforce le fallback local par fournisseur et permet de tendre progressivement vers un OCR local plus intelligent.
+- Les corrections de facture valides sont aussi re-apprises: le routeur facture reinjecte les lignes corriges dans `SupplierInvoiceTemplate.exampleRows` pour memoriser les erreurs humaines et fiabiliser les prochaines analyses du meme fournisseur.
+- L'alimentation stock depuis une facture detecte automatiquement les allergenes sur les lignes importees et les recopie sur l'article cree ou mis a jour, sans effacer les allergenes manuels.
+- Le seed local ne rehydrate plus `Lieu noir` si l'article existe deja, meme archive: cela evite qu'il revienne au redemarrage.
+- Sur mobile, la navigation passe par un menu complet; dans `HACCP`, les sous-categories sont cachees tant que l'utilisateur n'ouvre pas le bloc; dans `Recipes`, l'ajout d'ingredient passe par une recherche d'article au lieu d'une liste brute; dans `Time Clock`, l'heure courante et le dernier badge sont visibles en meme temps.
+- `/recipes` a ete refondu en experience premium avec trois zones: sidebar recettes, fiche detaillee au centre avec photo persistante et KPIs, et panneau ingredients intelligent avec recherche type commande palette, sous-recettes, drag-and-drop et ajout rapide.
+- Le backend recettes stocke maintenant la photo de fiche, l'ordre des ingredients et accepte la reorganisation persistante des lignes.
 
 ## Validation realisee
 
@@ -71,6 +79,7 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - API qualite restaurant testee: planning mercredi midi, releve conforme armoire refrigeree, releve non conforme congelateur avec action corrective, validation Sol, creation etiquette depuis fiche technique, creation etiquette libre, impression etiquette.
 - API qualite recurrente testee: planning temperatures du dimanche 10 mai 2026, taches HACCP du 10 mai et du 11 mai distinctes, `Sol` reste `DONE` au refresh du 10 mai et revient `TODO` le 11 mai.
 - API production testee: ingredient `Lieu noir` ajoute a la fiche `Cote de boeuf`, production de `4` portions creee, stock `Lieu noir` de `11 kg` a `9 kg`, DLC auto au `13/05/2026 18:54`, etiquette auto et trace HACCP `Production labo`.
+- Page `recipes` repond `200` apres la refonte UX/UI premium.
 - Pages `team`, `planning` et `time-clock` repondent `200` depuis le container Next avec fetch manuel.
 - Pages `invoices`, `team`, `planning` et `time-clock` repondent `200` depuis le container Next avec fetch manuel.
 - Les routes `/api/v1/invoices/upload` et `/api/v1/invoices/{id}/document` fonctionnent avec token local et fournisseur selectionne.

@@ -202,6 +202,7 @@ class RecipeIngredientCreate(BaseModel):
     unit: str | None = None
     unit_cost: Decimal | None = None
     waste_rate: Decimal = Decimal("0")
+    sort_order: int | None = None
 
 
 class RecipeIngredientUpdate(BaseModel):
@@ -212,6 +213,11 @@ class RecipeIngredientUpdate(BaseModel):
     unit: str | None = None
     unit_cost: Decimal | None = None
     waste_rate: Decimal | None = None
+    sort_order: int | None = None
+
+
+class RecipeIngredientsReorderRequest(BaseModel):
+    ingredient_ids: list[str] = Field(default_factory=list)
 
 
 class SubRecipeCreate(BaseModel):
@@ -374,6 +380,7 @@ class PurchaseOrderReceive(BaseModel):
 
 class InvoiceLineOut(BaseModel):
     id: str
+    code_article: str | None = None
     label: str
     quantity: Decimal
     unit: str
@@ -416,6 +423,7 @@ class InvoiceUploadRequest(BaseModel):
 
 class InvoiceLineUpdate(BaseModel):
     id: str | None = None
+    code_article: str | None = None
     label: str = Field(min_length=1, max_length=180)
     quantity: Decimal = Field(gt=0)
     unit: str = Field(min_length=1, max_length=32)

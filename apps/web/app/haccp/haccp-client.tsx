@@ -67,6 +67,7 @@ export function HaccpClient() {
   const [success, setSuccess] = useState("");
   const [responsible, setResponsible] = useState("Aymeric Admin");
   const [comment, setComment] = useState("");
+  const [showSubCategories, setShowSubCategories] = useState(false);
 
   const selected = useMemo(
     () => [...todayTasks, ...historyTasks].find((task) => task.id === selectedId) ?? todayTasks[0] ?? historyTasks[0] ?? null,
@@ -216,7 +217,18 @@ export function HaccpClient() {
           <Button onClick={startCreate}><Plus className="h-4 w-4" />Contrôle manuel</Button>
         </section>
 
-        <QualityNav active="cleaning" />
+        <Card className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-foreground/55">Qualité / HACCP</p>
+              <h2 className="text-base font-semibold">Catégories</h2>
+            </div>
+            <Button variant="secondary" onClick={() => setShowSubCategories((current) => !current)}>
+              {showSubCategories ? "Masquer" : "Afficher"}
+            </Button>
+          </div>
+          {showSubCategories ? <div className="mt-4"><QualityNav active="cleaning" compact /></div> : null}
+        </Card>
 
         {error ? <p className="rounded-md bg-muted px-3 py-2 text-sm">{error}</p> : null}
         {success ? <p className="rounded-md bg-foreground px-3 py-2 text-sm text-background">{success}</p> : null}

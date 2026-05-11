@@ -3,6 +3,7 @@ from decimal import Decimal
 from fastapi import HTTPException, status
 
 from app.db.prisma import db
+from app.services.allergens import detect_allergens, merge_allergens
 
 
 async def ensure_supplier_belongs_to_restaurant(supplier_id: str | None, restaurant_id: str) -> None:
@@ -55,6 +56,7 @@ async def apply_invoice_lines_to_stock(invoice, restaurant_id: str) -> int:
         if not item:
             item = await db.inventoryitem.find_first(where={"restaurantId": restaurant_id, "name": line.label})
         unit_cost = line.unitPrice
+        detected_allergens = detect_allergens(line.label, getattr(line, "unit", None))
         if not item:
             item = await db.inventoryitem.create(
                 data={
@@ -66,9 +68,21 @@ async def apply_invoice_lines_to_stock(invoice, restaurant_id: str) -> int:
                     "quantityOnHand": Decimal("0"),
                     "reorderPoint": Decimal("0"),
                     "averageCost": unit_cost,
-                    "allergens": [],
+                    "allergens": detected_allergens,
+                    "autoAllergens": detected_allergens,
                 }
             )
+        elif detected_allergens:
+            merged_allergens = merge_allergens(item.allergens, detected_allergens)
+            merged_auto_allergens = merge_allergens(getattr(item, "autoAllergens", []) or [], detected_allergens)
+            if merged_allergens != (item.allergens or []) or merged_auto_allergens != (getattr(item, "autoAllergens", []) or []):
+                await db.inventoryitem.update(
+                    where={"id": item.id},
+                    data={
+                        "allergens": merged_allergens,
+                        "autoAllergens": merged_auto_allergens,
+                    },
+                )
         await create_stock_movement(
             item=item,
             movement_type="PURCHASE",

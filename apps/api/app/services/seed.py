@@ -57,10 +57,12 @@ async def seed_local_admin(settings: Settings) -> None:
 
 
 async def _seed_lieu_noir(restaurant_id: str) -> None:
-    auto_allergens = detect_allergens("Lieu noir", "Poisson")
     existing_item = await db.inventoryitem.find_first(
         where={"restaurantId": restaurant_id, "name": "Lieu noir"}
     )
+    if existing_item:
+        return
+    auto_allergens = detect_allergens("Lieu noir", "Poisson")
     item_data = {
         "sku": "1",
         "name": "Lieu noir",
@@ -75,7 +77,4 @@ async def _seed_lieu_noir(restaurant_id: str) -> None:
         "isActive": True,
         "archivedAt": None,
     }
-    if existing_item:
-        await db.inventoryitem.update(where={"id": existing_item.id}, data=item_data)
-    else:
-        await db.inventoryitem.create(data={"restaurantId": restaurant_id, **item_data})
+    await db.inventoryitem.create(data={"restaurantId": restaurant_id, **item_data})

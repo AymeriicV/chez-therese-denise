@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 type InvoiceLine = {
   id: string;
+  code_article: string | null;
   label: string;
   quantity: string;
   unit: string;
@@ -52,6 +53,18 @@ type Invoice = {
     name: string | null;
     keywordHints: string[];
     lineHints: string[];
+    exampleRows: {
+      code_article: string | null;
+      designation: string | null;
+      brand: string | null;
+      gtin: string | null;
+      unit: string | null;
+      quantity: string | null;
+      unit_price: string | null;
+      amount_ht: string | null;
+      tax_rate: string | null;
+      confidence: string | null;
+    }[];
     notes: string | null;
     isActive: boolean;
   } | null;
@@ -72,6 +85,7 @@ type StockItem = {
 
 type InvoiceDraftLine = {
   id: string | null;
+  code_article: string | null;
   label: string;
   quantity: string;
   unit: string;
@@ -127,6 +141,7 @@ const statusLabels: Record<Invoice["status"], string> = {
 
 const emptyLine = (): InvoiceDraftLine => ({
   id: null,
+  code_article: null,
   label: "",
   quantity: "1",
   unit: "piece",
@@ -187,6 +202,7 @@ export function InvoicesClient() {
       total_including_tax: selected.total_including_tax ?? "",
       lines: selected.lines.map((line) => ({
         id: line.id,
+        code_article: line.code_article,
         label: line.label,
         quantity: line.quantity,
         unit: line.unit,
@@ -337,6 +353,7 @@ export function InvoicesClient() {
         total_including_tax: draft.total_including_tax || null,
         lines: draft.lines.map((line) => ({
           id: line.id,
+          code_article: line.code_article,
           label: line.label,
           quantity: line.quantity,
           unit: line.unit,
@@ -729,6 +746,7 @@ export function InvoicesClient() {
                   {draft.lines.map((line, index) => (
                     <div key={`${line.id ?? "new"}-${index}`} className="rounded-lg border border-border p-3">
                       <div className="grid gap-3 md:grid-cols-2">
+                        <Field label="Code article" value={line.code_article || ""} onChange={(value) => updateDraftLine(index, { code_article: value || null })} />
                         <Field label="Libellé" value={line.label} onChange={(value) => updateDraftLine(index, { label: value })} />
                         <Field label="Article stock lié" as="select" value={line.inventory_item_id} onChange={(value) => updateDraftLine(index, { inventory_item_id: value })}>
                           <option value="">Non lié</option>

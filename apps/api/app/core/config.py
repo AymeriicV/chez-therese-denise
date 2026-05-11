@@ -49,6 +49,15 @@ class Settings(BaseSettings):
         alias="INVOICE_UPLOAD_DIR",
     )
 
+    openai_api_key: str | None = Field(
+        default=None,
+        alias="OPENAI_API_KEY",
+    )
+    openai_invoice_model: str = Field(
+        default="gpt-5.2",
+        alias="OPENAI_INVOICE_MODEL",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

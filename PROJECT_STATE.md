@@ -37,6 +37,7 @@ Pour reprendre apres interruption:
 - [x] 16 - Production labo, tracabilite, DLC et etiquettes automatiques
 - [x] 17 - Equipe, planning et badgeuse avec roles et acces limites
 - [x] 18 - Archivage factures fournisseurs et OCR guide par fournisseur
+- [x] 19 - Refonte UX/UI premium du module fiches techniques
 
 ## Modules cible
 
@@ -113,14 +114,26 @@ curl -I http://localhost:3000/invoices
 - Les fichiers originaux photo/PDF sont stockes durablement dans le volume Docker `uploads` via `INVOICE_UPLOAD_DIR`.
 - Les factures gardent le nom original, le type MIME, la taille, le chemin serveur, l'URL securisee, l'utilisateur upload et le fournisseur lie.
 - Le detail facture affiche l'aperçu du document original, le telechargement, les statuts OCR et validation, ainsi que les filtres et tris de recherche.
-- L'OCR est guide par le fournisseur et peut s'appuyer sur `SupplierInvoiceTemplate` pour memoriser des mots-cles et affiner l'extraction par fournisseur.
+- L'OCR est guide par le fournisseur et s'appuie sur `SupplierInvoiceTemplate` pour memoriser des mots-cles, des lignes exemples structurees et affiner l'extraction par fournisseur.
 - Les lignes facture sont editables, peuvent etre reliees a des articles stock, et la validation cree les mouvements stock uniquement une fois.
+- Les lignes facture portent maintenant aussi `codeArticle` en base, dans l'API et dans l'UI, pour exploiter les codes fournisseur et les stocks SKU.
+- Chaque analyse GPT nourrit maintenant l'apprentissage local via `exampleRows` pour que le fallback local s'enrichisse progressivement par fournisseur.
+- L'OCR facture utilise OpenAI vision comme moteur principal quand la cle est presente, avec `gpt-5.2` par defaut, puis le local s'appuie sur les mots-cles et exemples appris si GPT n'est pas disponible.
+- Quand une facture est corrigee puis validee, les corrections sont aussi re-injectees dans `SupplierInvoiceTemplate.exampleRows` pour apprendre les erreurs et mieux reconnaitre les prochains documents du meme fournisseur.
+- Lors de l'alimentation du stock depuis une facture, les allergenes sont detectes automatiquement sur la ligne importee puis propagés sur l'article cree ou mis a jour.
+- Le seed local n'ecrase plus les articles existants: `Lieu noir` ne revient plus apres archivage lors d'un simple redemarrage.
+- L'interface mobile expose maintenant un menu complet, la page HACCP replie ses sous-categories par defaut, les fiches techniques proposent une vraie recherche d'articles, et la badgeuse affiche l'heure courante plus le dernier badge.
+- `/recipes` a ete refondu en vue premium en trois zones: sidebar recettes, zone detail avec photo persistante et KPIs, et panneau ingredients intelligent avec recherche, sous-recettes, drag-and-drop et import photo.
+- Le backend recettes expose maintenant la photo persistante, l'ordre des ingredients et un endpoint de reorganisation pour garder la base synchronisee avec l'UI.
 
 ## Validation etape 18
 
 - `python3 -m compileall -q apps/api`: OK.
+- `docker compose exec -T api prisma generate --schema /app/packages/db/prisma/schema.prisma`: OK.
+- `docker compose exec -T api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma`: OK.
 - `docker compose exec -T web pnpm --filter @ctd/web build`: OK apres nettoyage de `.next`.
 - `curl -I http://localhost:3000/invoices`: HTTP 200.
+- `curl -I http://localhost:3000/recipes`: HTTP 200.
 - `curl http://localhost:8000/health`: OK.
 - Login local `aymericvenacterpro@gmail.com / admin`: OK.
 - Upload facture teste via `/api/v1/invoices/upload` avec fournisseur selectionne: OK.

@@ -1,13 +1,18 @@
-from decimal import Decimal
 from datetime import UTC, datetime
+from decimal import Decimal
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 
+from app.core.config import get_settings
 from app.db.prisma import db
 from app.models.schemas import (
     RecipeCreate,
     RecipeIngredientCreate,
     RecipeIngredientUpdate,
+    RecipeIngredientsReorderRequest,
     RecipeUpdate,
     SubRecipeCreate,
     SubRecipeUpdate,
@@ -16,6 +21,10 @@ from app.routers.deps import get_restaurant_context, require_roles
 from app.services.audit import write_audit_log
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
+settings = get_settings()
+MAX_PHOTO_SIZE = 10 * 1024 * 1024
+ALLOWED_PHOTO_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 @router.get("")
@@ -43,6 +52,48 @@ async def create_recipe(payload: RecipeCreate, ctx=Depends(require_roles("OWNER"
     )
     await _audit(ctx, "recipes.recipe_created", "Recipe", recipe.id)
     return _serialize_recipe(recipe)
+
+
+@router.post("/{recipe_id}/photo")
+async def upload_recipe_photo(
+    recipe_id: str,
+    file: UploadFile = File(...),
+    ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF")),
+):
+    recipe = await _get_recipe(recipe_id, ctx["restaurant_id"])
+    photo = await _store_recipe_photo(file, ctx["restaurant_id"], recipe_id)
+    if recipe.photoPath:
+        old_path = Path(recipe.photoPath)
+        if old_path.exists() and old_path != photo["storage_path"]:
+            old_path.unlink(missing_ok=True)
+    updated = await db.recipe.update(
+        where={"id": recipe.id},
+        data={
+            "photoName": photo["original_name"],
+            "photoMimeType": photo["mime_type"],
+            "photoPath": str(photo["storage_path"]),
+        },
+        include=_recipe_include(),
+    )
+    await _audit(
+        ctx,
+        "recipes.photo_uploaded",
+        "Recipe",
+        recipe.id,
+        {"filename": photo["original_name"], "size": photo["file_size"]},
+    )
+    return _serialize_recipe(updated)
+
+
+@router.get("/{recipe_id}/photo")
+async def get_recipe_photo(recipe_id: str, ctx=Depends(get_restaurant_context)):
+    recipe = await _get_recipe(recipe_id, ctx["restaurant_id"])
+    if not recipe.photoPath:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo introuvable")
+    path = Path(recipe.photoPath)
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo introuvable")
+    return FileResponse(path, media_type=recipe.photoMimeType or "image/jpeg", filename=recipe.photoName or f"{recipe.name}.jpg")
 
 
 @router.get("/meta/allergens")
@@ -219,6 +270,23 @@ async def add_recipe_ingredient(
     return _serialize_recipe(recipe)
 
 
+@router.post("/{recipe_id}/ingredients/reorder")
+async def reorder_recipe_ingredients(
+    recipe_id: str,
+    payload: RecipeIngredientsReorderRequest,
+    ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF")),
+):
+    recipe = await _get_recipe(recipe_id, ctx["restaurant_id"])
+    current_ids = {ingredient.id for ingredient in recipe.ingredients}
+    if set(payload.ingredient_ids) != current_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="L'ordre des ingrédients est incomplet")
+    for position, ingredient_id in enumerate(payload.ingredient_ids):
+        await db.recipeingredient.update(where={"id": ingredient_id}, data={"sortOrder": position})
+    recipe = await _recalculate_recipe(recipe_id, ctx)
+    await _audit(ctx, "recipes.ingredients_reordered", "Recipe", recipe_id)
+    return _serialize_recipe(recipe)
+
+
 @router.patch("/{recipe_id}/ingredients/{ingredient_id}")
 async def update_recipe_ingredient(
     recipe_id: str,
@@ -242,6 +310,7 @@ async def update_recipe_ingredient(
                 unit=payload.unit,
                 unit_cost=payload.unit_cost,
                 waste_rate=payload.waste_rate if payload.waste_rate is not None else ingredient.wasteRate,
+                sort_order=payload.sort_order if payload.sort_order is not None else _ingredient_sort_order(ingredient),
             ),
             ctx["restaurant_id"],
         )
@@ -262,6 +331,7 @@ async def update_recipe_ingredient(
             "unitCostSnapshot": unit_cost,
             "wasteRate": waste_rate,
             "totalCost": _line_cost(quantity, unit_cost, waste_rate),
+            "sortOrder": payload.sort_order if payload.sort_order is not None else _ingredient_sort_order(ingredient),
         }
         await db.recipeingredient.update(
             where={"id": ingredient_id},
@@ -315,6 +385,7 @@ async def duplicate_recipe(recipe_id: str, ctx=Depends(require_roles("OWNER", "A
                         "unitCostSnapshot": ingredient.unitCostSnapshot,
                         "wasteRate": ingredient.wasteRate,
                         "totalCost": ingredient.totalCost,
+                        "sortOrder": _ingredient_sort_order(ingredient),
                     }
                     for ingredient in source.ingredients
                 ]
@@ -343,6 +414,7 @@ async def _build_recipe_ingredient_data(recipe_id: str, payload: RecipeIngredien
             "unitCostSnapshot": unit_cost,
             "wasteRate": waste_rate,
             "totalCost": _line_cost(quantity, unit_cost, waste_rate),
+            "sortOrder": payload.sort_order if payload.sort_order is not None else await _next_recipe_sort_order(recipe_id),
         }
     if payload.sub_recipe_id:
         sub_recipe = await db.subrecipe.find_first(
@@ -362,6 +434,7 @@ async def _build_recipe_ingredient_data(recipe_id: str, payload: RecipeIngredien
             "unitCostSnapshot": unit_cost,
             "wasteRate": waste_rate,
             "totalCost": _line_cost(quantity, unit_cost, waste_rate),
+            "sortOrder": payload.sort_order if payload.sort_order is not None else await _next_recipe_sort_order(recipe_id),
         }
     if not payload.name or payload.unit_cost is None or payload.unit is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Manual ingredient needs name, unit and unit_cost")
@@ -373,6 +446,7 @@ async def _build_recipe_ingredient_data(recipe_id: str, payload: RecipeIngredien
         "unitCostSnapshot": payload.unit_cost,
         "wasteRate": payload.waste_rate,
         "totalCost": _line_cost(payload.quantity, payload.unit_cost, payload.waste_rate),
+        "sortOrder": payload.sort_order if payload.sort_order is not None else await _next_recipe_sort_order(recipe_id),
     }
 
 
@@ -393,6 +467,7 @@ async def _build_sub_recipe_ingredient_data(sub_recipe_id: str, payload: RecipeI
             "unitCostSnapshot": unit_cost,
             "wasteRate": payload.waste_rate,
             "totalCost": _line_cost(payload.quantity, unit_cost, payload.waste_rate),
+            "sortOrder": payload.sort_order if payload.sort_order is not None else await _next_sub_recipe_sort_order(sub_recipe_id),
         }
     if not payload.name or payload.unit_cost is None or payload.unit is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Manual ingredient needs name, unit and unit_cost")
@@ -404,6 +479,7 @@ async def _build_sub_recipe_ingredient_data(sub_recipe_id: str, payload: RecipeI
         "unitCostSnapshot": payload.unit_cost,
         "wasteRate": payload.waste_rate,
         "totalCost": _line_cost(payload.quantity, payload.unit_cost, payload.waste_rate),
+        "sortOrder": payload.sort_order if payload.sort_order is not None else await _next_sub_recipe_sort_order(sub_recipe_id),
     }
 
 
@@ -469,6 +545,48 @@ def _line_cost(quantity: Decimal, unit_cost: Decimal, waste_rate: Decimal):
     return quantity * unit_cost * (Decimal("1") + waste_rate)
 
 
+def _ingredient_sort_order(ingredient) -> int:
+    return int(getattr(ingredient, "sortOrder", getattr(ingredient, "sort_order", 0)) or 0)
+
+
+async def _store_recipe_photo(file: UploadFile, restaurant_id: str, recipe_id: str):
+    filename = file.filename or "recipe-photo"
+    suffix = Path(filename).suffix.lower()
+    if suffix not in ALLOWED_PHOTO_EXTENSIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Photo recette au format JPG, PNG ou WEBP uniquement")
+    if file.content_type not in ALLOWED_PHOTO_MIME_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Type de fichier photo non autorisé")
+    content = await file.read(MAX_PHOTO_SIZE + 1)
+    if len(content) > MAX_PHOTO_SIZE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La photo recette dépasse la taille maximale autorisée")
+    root = Path(settings.invoice_upload_dir).parent / "recipes" / restaurant_id
+    root.mkdir(parents=True, exist_ok=True)
+    stored_name = f"{recipe_id}-{uuid4().hex}{suffix}"
+    storage_path = root / stored_name
+    storage_path.write_bytes(content)
+    return {
+        "original_name": filename,
+        "stored_name": stored_name,
+        "storage_path": storage_path,
+        "mime_type": file.content_type,
+        "file_size": len(content),
+    }
+
+
+async def _next_recipe_sort_order(recipe_id: str) -> int:
+    ingredients = await db.recipeingredient.find_many(where={"recipeId": recipe_id}, select={"sortOrder": True})
+    if not ingredients:
+        return 0
+    return max(_ingredient_sort_order(ingredient) for ingredient in ingredients) + 1
+
+
+async def _next_sub_recipe_sort_order(sub_recipe_id: str) -> int:
+    ingredients = await db.subrecipeingredient.find_many(where={"subRecipeId": sub_recipe_id}, select={"sortOrder": True})
+    if not ingredients:
+        return 0
+    return max(_ingredient_sort_order(ingredient) for ingredient in ingredients) + 1
+
+
 async def _get_recipe(recipe_id: str, restaurant_id: str):
     recipe = await db.recipe.find_first(
         where={"id": recipe_id, "restaurantId": restaurant_id},
@@ -505,6 +623,7 @@ def _sub_recipe_include():
 
 
 def _serialize_recipe(recipe):
+    ingredients = sorted(recipe.ingredients, key=lambda ingredient: (_ingredient_sort_order(ingredient), ingredient.createdAt))
     return {
         "id": recipe.id,
         "name": recipe.name,
@@ -517,9 +636,14 @@ def _serialize_recipe(recipe):
         "margin_rate": recipe.marginRate,
         "allergens": recipe.allergens,
         "instructions": recipe.instructions,
+        "photo_name": recipe.photoName,
+        "photo_mime_type": recipe.photoMimeType,
+        "photo_path": recipe.photoPath,
+        "photo_url": f"/api/v1/recipes/{recipe.id}/photo" if recipe.photoPath else None,
         "is_active": recipe.isActive,
-        "ingredient_count": len(recipe.ingredients),
-        "ingredients": [_serialize_recipe_ingredient(ingredient) for ingredient in recipe.ingredients],
+        "updated_at": recipe.updatedAt,
+        "ingredient_count": len(ingredients),
+        "ingredients": [_serialize_recipe_ingredient(ingredient) for ingredient in ingredients],
     }
 
 
@@ -534,12 +658,14 @@ def _serialize_recipe_ingredient(ingredient):
         "unit_cost": ingredient.unitCostSnapshot,
         "waste_rate": ingredient.wasteRate,
         "total_cost": ingredient.totalCost,
+        "sort_order": _ingredient_sort_order(ingredient),
         "allergens": _ingredient_allergens(ingredient),
         "source": "sub_recipe" if ingredient.subRecipeId else "stock" if ingredient.inventoryItemId else "manual",
     }
 
 
 def _serialize_sub_recipe(sub_recipe):
+    ingredients = sorted(sub_recipe.ingredients, key=lambda ingredient: (_ingredient_sort_order(ingredient), ingredient.createdAt))
     return {
         "id": sub_recipe.id,
         "name": sub_recipe.name,
@@ -551,8 +677,8 @@ def _serialize_sub_recipe(sub_recipe):
         "allergens": sub_recipe.allergens,
         "instructions": sub_recipe.instructions,
         "is_active": sub_recipe.isActive,
-        "ingredient_count": len(sub_recipe.ingredients),
-        "ingredients": [_serialize_sub_recipe_ingredient(ingredient) for ingredient in sub_recipe.ingredients],
+        "ingredient_count": len(ingredients),
+        "ingredients": [_serialize_sub_recipe_ingredient(ingredient) for ingredient in ingredients],
     }
 
 
@@ -566,6 +692,7 @@ def _serialize_sub_recipe_ingredient(ingredient):
         "unit_cost": ingredient.unitCostSnapshot,
         "waste_rate": ingredient.wasteRate,
         "total_cost": ingredient.totalCost,
+        "sort_order": _ingredient_sort_order(ingredient),
         "allergens": ingredient.inventoryItem.allergens if ingredient.inventoryItem else [],
     }
 

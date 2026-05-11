@@ -69,6 +69,8 @@ export function TimeClockClient() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [form, setForm] = useState<CorrectionForm>(emptyCorrection);
+  const [nowLabel, setNowLabel] = useState("");
+  const [lastBadgeTime, setLastBadgeTime] = useState("");
   const role = getSessionRole();
   const isEmployee = role === "EMPLOYEE";
   const latestOpen = entries.find((entry) => entry.is_open) ?? null;
@@ -88,6 +90,13 @@ export function TimeClockClient() {
 
   useEffect(() => {
     void loadEntries();
+  }, []);
+
+  useEffect(() => {
+    const update = () => setNowLabel(new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
   async function loadEntries() {
@@ -122,6 +131,7 @@ export function TimeClockClient() {
     try {
       const entry = await apiRequest<Entry>("/time-clock/punch-in", { method: "POST" });
       setEntries((current) => [entry, ...current.filter((item) => item.id !== entry.id)]);
+      setLastBadgeTime(new Date(entry.clock_in).toLocaleString("fr-FR"));
       setSuccess("Arrivée enregistrée.");
       await loadEntries();
     } catch (err) {
@@ -138,6 +148,7 @@ export function TimeClockClient() {
     try {
       const entry = await apiRequest<Entry>("/time-clock/punch-out", { method: "POST" });
       setEntries((current) => [entry, ...current.filter((item) => item.id !== entry.id)]);
+      setLastBadgeTime(new Date(entry.clock_out || entry.clock_in).toLocaleString("fr-FR"));
       setSuccess("Départ enregistré.");
       await loadEntries();
     } catch (err) {
@@ -174,6 +185,7 @@ export function TimeClockClient() {
       setEntries((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
       setForm(emptyCorrection);
       setSelectedEmployeeId(saved.employee_id);
+      setLastBadgeTime(new Date(saved.clock_in).toLocaleString("fr-FR"));
       setSuccess("Correction enregistrée.");
       await loadEntries();
     } catch (err) {
@@ -209,6 +221,18 @@ export function TimeClockClient() {
               <div>
                 <h2 className="text-lg font-semibold">Mes pointages</h2>
                 <p className="text-sm text-foreground/55">Heure serveur uniquement, sans saisie manuelle.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <div className="rounded-md bg-muted px-3 py-2 text-sm">
+                  <p className="text-xs text-foreground/55">Heure affichée</p>
+                  <p className="font-semibold">{nowLabel || "..."}</p>
+                </div>
+                {lastBadgeTime ? (
+                  <div className="rounded-md bg-muted px-3 py-2 text-sm">
+                    <p className="text-xs text-foreground/55">Dernier badge</p>
+                    <p className="font-semibold">{lastBadgeTime}</p>
+                  </div>
+                ) : null}
               </div>
               <div className="flex gap-2">
                 <Button onClick={punchIn} disabled={saving || Boolean(latestOpen)}><Clock3 className="h-4 w-4" />Pointer mon arrivée</Button>
@@ -253,7 +277,8 @@ export function TimeClockClient() {
                 })}>
                   <div className="min-w-0">
                     <p className="text-sm font-medium">{entry.employee_name}</p>
-                    <p className="text-xs text-foreground/55">{new Date(entry.clock_in).toLocaleString("fr-FR")} - {entry.clock_out ? new Date(entry.clock_out).toLocaleString("fr-FR") : "En cours"}</p>
+                    <p className="text-xs text-foreground/55">Heure initiale: {new Date(entry.clock_in).toLocaleString("fr-FR")}</p>
+                    <p className="text-xs text-foreground/55">Heure badgée: {entry.clock_out ? new Date(entry.clock_out).toLocaleString("fr-FR") : "En cours"}</p>
                     <p className="mt-1 text-xs text-foreground/55">{entry.position ?? "Poste non renseigné"} - {entry.worked_minutes} min</p>
                     {entry.corrections.length > 0 ? <p className="mt-1 text-xs text-foreground/55">Corrections: {entry.corrections.length}</p> : null}
                   </div>

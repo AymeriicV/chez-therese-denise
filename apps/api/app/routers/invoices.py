@@ -175,7 +175,7 @@ async def process_invoice(invoice_id: str, ctx=Depends(require_roles("OWNER", "A
             "lines": {"include": {"inventoryItem": True}},
         },
     )
-    await _update_template_learning(template.id, extracted.lines)
+    await _update_template_learning(template.id, extracted)
     await _audit(ctx, "invoice.ocr_processed", invoice.id, {"confidence": str(extracted.confidence), "templateId": template.id})
     return _serialize_invoice(updated, ctx["restaurant_id"])
 
@@ -219,6 +219,8 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdateRequest, ctx=Dep
                 },
             )
     refreshed = await _get_invoice(invoice_id, ctx["restaurant_id"])
+    if refreshed.template:
+        await _learn_template_from_corrections(refreshed.template.id, invoice, refreshed)
     await _audit(ctx, "invoice.updated", invoice.id, {"fields": list(payload.model_fields_set)})
     return _serialize_invoice(refreshed, ctx["restaurant_id"])
 
@@ -241,6 +243,8 @@ async def approve_invoice(invoice_id: str, ctx=Depends(require_roles("OWNER", "A
             "lines": {"include": {"inventoryItem": True}},
         },
     )
+    if updated.template:
+        await _learn_template_from_corrections(updated.template.id, invoice, updated)
     await _audit(ctx, "invoice.approved", invoice.id, {"stockLinesApplied": applied_lines})
     return _serialize_invoice(updated, ctx["restaurant_id"])
 
@@ -303,41 +307,124 @@ async def _get_or_create_template(restaurant_id: str, supplier_id: str, supplier
             "name": f"Template OCR {supplier_name}",
             "keywordHints": Json([supplier_name]),
             "lineHints": Json([]),
+            "exampleRows": Json([]),
             "notes": "Template initial cree automatiquement depuis une facture importee.",
         }
     )
 
 
-async def _update_template_learning(template_id: str, lines) -> None:
+async def _update_template_learning(template_id: str, extracted) -> None:
     template = await db.supplierinvoicetemplate.find_first(where={"id": template_id})
     if not template:
         return
     existing = _normalize_keywords(template.keywordHints)
     learned = existing[:]
-    for line in lines:
+    for line in extracted.lines:
         for token in _normalize_keywords([line.label]):
             if token not in learned:
                 learned.append(token)
+    raw_rows = []
+    if getattr(extracted, "raw_payload", None):
+        raw_rows = extracted.raw_payload.get("structured_rows") or []
+    example_rows = _merge_template_examples(template.exampleRows, raw_rows)
     await db.supplierinvoicetemplate.update(
         where={"id": template.id},
         data={
             "keywordHints": Json(learned[:50]),
-            "lineHints": Json([line.label for line in lines[:20]]),
+            "lineHints": Json(_merge_template_line_hints(template.lineHints, extracted.lines)),
+            "exampleRows": Json(example_rows),
         },
     )
+
+
+async def _learn_template_from_corrections(template_id: str, original_invoice, corrected_invoice) -> None:
+    template = await db.supplierinvoicetemplate.find_first(where={"id": template_id})
+    if not template:
+        return
+    existing_keywords = _normalize_keywords(template.keywordHints)
+    learned_keywords = existing_keywords[:]
+    corrected_lines = list(getattr(corrected_invoice, "lines", []) or [])
+    original_payload = getattr(original_invoice, "ocrPayload", None) or {}
+    original_rows = []
+    if isinstance(original_payload, dict):
+        original_rows = original_payload.get("structured_rows") or []
+    correction_rows = _build_correction_rows(original_rows, corrected_lines)
+    for row in correction_rows:
+        for token in _normalize_keywords([row.get("designation") or row.get("label") or ""]):
+            if token not in learned_keywords:
+                learned_keywords.append(token)
+        if row.get("code_article"):
+            code = str(row["code_article"]).strip()
+            if code and code not in learned_keywords:
+                learned_keywords.append(code)
+    example_rows = _merge_template_examples(template.exampleRows, correction_rows)
+    await db.supplierinvoicetemplate.update(
+        where={"id": template.id},
+        data={
+            "keywordHints": Json(learned_keywords[:60]),
+            "lineHints": Json(_merge_template_line_hints(template.lineHints, corrected_lines)),
+            "exampleRows": Json(example_rows),
+        },
+    )
+
+
+def _build_correction_rows(original_rows, corrected_lines) -> list[dict]:
+    rows: list[dict] = []
+    original_by_label = {}
+    original_by_code = {}
+    for row in original_rows or []:
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("designation") or row.get("label") or "").strip().lower()
+        if key:
+            original_by_label[key] = row
+        code_key = str(row.get("code_article") or "").strip().lower()
+        if code_key:
+            original_by_code[code_key] = row
+    for line in corrected_lines or []:
+        if not line:
+            continue
+        label = str(getattr(line, "label", "") or "").strip()
+        if not label:
+            continue
+        line_code = str(getattr(line, "codeArticle", None) or getattr(line, "code_article", None) or "").strip().lower()
+        original = original_by_code.get(line_code) or original_by_label.get(label.lower(), {})
+        rows.append(
+            {
+                "code_article": getattr(line, "codeArticle", None) or getattr(line, "code_article", None) or original.get("code_article"),
+                "designation": label,
+                "brand": original.get("brand"),
+                "gtin": original.get("gtin"),
+                "unit": getattr(line, "unit", None),
+                "quantity": str(getattr(line, "quantity", "") or ""),
+                "unit_price": str(getattr(line, "unitPrice", None) or getattr(line, "unit_price", None) or ""),
+                "amount_ht": str(getattr(line, "total", None) or original.get("amount_ht") or original.get("total_ht") or ""),
+                "tax_rate": original.get("tax_rate"),
+                "confidence": original.get("confidence"),
+                "source": "correction",
+                "original_designation": original.get("designation"),
+                "original_code_article": original.get("code_article"),
+            }
+        )
+    return rows
 
 
 async def _match_invoice_lines(restaurant_id: str, lines) -> dict[str, str]:
     items = await db.inventoryitem.find_many(where={"restaurantId": restaurant_id, "isActive": True})
     normalized = {item.name.lower(): item.id for item in items}
+    sku_index = {str(item.sku).lower(): item.id for item in items if item.sku}
     result: dict[str, str] = {}
     for line in lines:
         line_key = line.label.lower()
+        code_key = (getattr(line, "code_article", None) or "").strip().lower()
+        if code_key and code_key in sku_index:
+            result[line_key] = sku_index[code_key]
+            continue
         if line_key in normalized:
             result[line_key] = normalized[line_key]
             continue
         for item in items:
-            if item.name.lower() in line_key or line_key in item.name.lower():
+            if item.name.lower() in line_key or line_key in item.name.lower() or (code_key and code_key == str(item.sku or "").lower()):
                 result[line_key] = item.id
                 break
     return result
@@ -412,6 +499,7 @@ def _serialize_invoice(invoice, restaurant_id: str):
         "lines": [
             {
                 "id": line.id,
+                "code_article": line.codeArticle,
                 "label": line.label,
                 "quantity": line.quantity,
                 "unit": line.unit,
@@ -435,9 +523,72 @@ def _template_payload(template):
         "name": template.name,
         "keywordHints": template.keywordHints or [],
         "lineHints": template.lineHints or [],
+        "exampleRows": template.exampleRows or [],
         "notes": template.notes,
         "isActive": template.isActive,
     }
+
+
+def _merge_template_line_hints(existing, lines) -> list[str]:
+    hints = _normalize_keywords(existing)
+    for line in lines:
+        label = getattr(line, "label", "") or ""
+        for token in _normalize_keywords([label]):
+            if token not in hints:
+                hints.append(token)
+    return hints[:50]
+
+
+def _merge_template_examples(existing, new_rows) -> list[dict]:
+    normalized: list[dict] = []
+    seen: set[str] = set()
+
+    def add_row(row) -> None:
+        if not isinstance(row, dict):
+            return
+        designation = str(row.get("designation") or row.get("label") or "").strip()
+        code_article = str(row.get("code_article") or "").strip()
+        if not designation and not code_article:
+            return
+        key = " | ".join(
+            [
+                code_article.lower(),
+                designation.lower(),
+                str(row.get("unit") or "").strip().lower(),
+                str(row.get("amount_ht") or row.get("total_ht") or "").strip(),
+            ]
+        )
+        if key in seen:
+            return
+        seen.add(key)
+        normalized.append(
+            {
+                "code_article": code_article or None,
+                "designation": designation or None,
+                "brand": row.get("brand"),
+                "gtin": row.get("gtin"),
+                "unit": row.get("unit"),
+                "quantity": row.get("quantity"),
+                "unit_price": row.get("unit_price"),
+                "amount_ht": row.get("amount_ht") or row.get("total_ht"),
+                "tax_rate": row.get("tax_rate"),
+                "confidence": row.get("confidence"),
+            }
+        )
+
+    for row in _normalize_template_example_rows(existing):
+        add_row(row)
+    for row in new_rows or []:
+        add_row(row)
+    return normalized[-40:]
+
+
+def _normalize_template_example_rows(value) -> list[dict]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [row for row in value if isinstance(row, dict)]
+    return []
 
 
 def _normalize_keywords(value) -> list[str]:

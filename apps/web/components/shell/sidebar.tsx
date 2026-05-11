@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
@@ -22,6 +23,8 @@ import {
   Thermometer,
   Truck,
   Users,
+  Menu,
+  X,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -55,12 +58,17 @@ export function Sidebar() {
   const role = getSessionRole();
   const isEmployee = role === "EMPLOYEE";
   const desktopItems = isEmployee ? employeeNavItems : navItems;
-  const mobileItems = isEmployee ? employeeNavItems : navItems.slice(0, 5);
+  const mobileItems = useMemo(() => (isEmployee ? employeeNavItems : navItems.slice(0, 3)), [isEmployee]);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   function logout() {
     clearStoredSession();
     redirectToLogin();
   }
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   return (
     <>
@@ -78,41 +86,18 @@ export function Sidebar() {
           {desktopItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
-            const isQualityGroup = item.href === "/haccp";
-            const qualityActive = pathname === "/haccp" || pathname === "/temperatures" || pathname === "/labels";
             return (
               <div key={item.href}>
                 <Link
                   href={item.href}
                   className={cn(
                     "flex h-10 items-center gap-3 rounded-md px-3 text-sm text-foreground/68 transition-colors hover:bg-muted hover:text-foreground",
-                    (active || (isQualityGroup && qualityActive)) && "bg-muted text-foreground",
+                    active && "bg-muted text-foreground",
                   )}
                 >
-                  <Icon className="h-4 w-4" />
-                  <span className="truncate">{item.label}</span>
-                </Link>
-                {isQualityGroup ? (
-                  <div className="mt-1 grid gap-1 pl-5">
-                    {qualityItems.map((qualityItem) => {
-                      const QualityIcon = qualityItem.icon;
-                      const qualityItemActive = pathname === qualityItem.href;
-                      return (
-                        <Link
-                          key={qualityItem.href}
-                          href={qualityItem.href}
-                          className={cn(
-                            "flex h-9 items-center gap-2 rounded-md px-3 text-xs text-foreground/60 transition-colors hover:bg-muted hover:text-foreground",
-                            qualityItemActive && "bg-muted text-foreground",
-                          )}
-                        >
-                          <QualityIcon className="h-3.5 w-3.5" />
-                          <span className="truncate">{qualityItem.label}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ) : null}
+                <Icon className="h-4 w-4" />
+                <span className="truncate">{item.label}</span>
+              </Link>
               </div>
             );
           })}
@@ -158,16 +143,71 @@ export function Sidebar() {
           );
         })}
         {isEmployee ? (
-          <button
-            type="button"
-            onClick={logout}
-            className="flex h-11 flex-col items-center justify-center gap-1 rounded-md text-[10px] text-foreground/60"
-          >
+          <button type="button" onClick={logout} className="flex h-11 flex-col items-center justify-center gap-1 rounded-md text-[10px] text-foreground/60">
             <LogOut className="h-4 w-4" />
             <span className="max-w-full truncate">Quitter</span>
           </button>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="flex h-11 flex-col items-center justify-center gap-1 rounded-md text-[10px] text-foreground/60"
+          >
+            <Menu className="h-4 w-4" />
+            <span className="max-w-full truncate">Menu</span>
+          </button>
+        )}
       </nav>
+      {mobileOpen ? (
+        <div className="fixed inset-0 z-30 bg-background/95 px-4 py-4 lg:hidden">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-foreground/55">Navigation</p>
+              <h2 className="text-lg font-semibold">Modules</h2>
+            </div>
+            <Button variant="secondary" size="icon" aria-label="Fermer le menu" onClick={() => setMobileOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="mt-4 grid gap-3 overflow-y-auto pb-24">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn("flex items-center gap-3 rounded-md border border-border bg-background px-4 py-3 text-sm", pathname === item.href && "bg-muted")}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+            <div className="rounded-md border border-border bg-background px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.16em] text-foreground/55">Qualité / HACCP</p>
+              <div className="mt-3 grid gap-2">
+                {qualityItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn("flex items-center gap-3 rounded-md px-3 py-2 text-sm", pathname === item.href && "bg-muted")}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+            <button type="button" onClick={logout} className="flex items-center gap-3 rounded-md border border-border bg-background px-4 py-3 text-left text-sm">
+              <LogOut className="h-4 w-4" />
+              <span>Déconnexion</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
