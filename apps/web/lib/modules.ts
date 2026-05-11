@@ -20,7 +20,6 @@ import {
   ReceiptText,
   Settings,
   ShieldCheck,
-  Sparkles,
   Tags,
   Truck,
   UploadCloud,
@@ -140,13 +139,6 @@ export const modules = [
     description: "Ventes, achats, pertes, productivité, food cost et prévisions.",
     status: "Tableau de bord initial",
     icon: BarChart3,
-  },
-  {
-    href: "/ai",
-    title: "IA prédictive",
-    description: "Prévision de demande, ruptures, achats recommandés et anomalies.",
-    status: "Navigation prête",
-    icon: Sparkles,
   },
   {
     href: "/orders",

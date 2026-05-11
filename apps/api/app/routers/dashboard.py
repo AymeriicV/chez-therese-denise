@@ -18,7 +18,6 @@ async def dashboard(ctx=Depends(get_restaurant_context)):
         ModuleSummary(key="planning", label="Planning equipe", href="/planning", status="live", metric=str(overview["kpis"]["planning_today"])),
         ModuleSummary(key="time_clock", label="Badgeuse", href="/time-clock", status="live", metric=str(overview["kpis"]["present_employees"])),
         ModuleSummary(key="analytics", label="Analytics", href="/analytics", status="live", metric=str(overview["kpis"]["price_alerts"])),
-        ModuleSummary(key="ai", label="IA predictive", href="/ai", status="soon", metric=str(overview["kpis"]["price_alerts"])),
         ModuleSummary(key="settings", label="Parametres entreprise", href="/settings", status="active", metric=overview["restaurant"]["name"]),
     ]
     return DashboardResponse(

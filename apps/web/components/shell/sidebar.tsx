@@ -18,7 +18,6 @@ import {
   PackageCheck,
   Settings,
   ShieldCheck,
-  Sparkles,
   Tags,
   Thermometer,
   Truck,
@@ -44,7 +43,6 @@ const navItems = [
   { href: "/planning", label: "Planning", icon: CalendarDays },
   { href: "/team", label: "Équipe", icon: Users },
   { href: "/analytics", label: "Analyses", icon: BarChart3 },
-  { href: "/ai", label: "IA", icon: Sparkles },
   { href: "/settings", label: "Paramètres", icon: Settings },
 ];
 
