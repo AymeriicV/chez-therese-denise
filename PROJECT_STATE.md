@@ -535,3 +535,4 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - La badgeuse compare les pointages au jour Paris, pas au jour UTC brut.
 - Le cache Next corrompu a été purgé puis le frontend redémarré pour supprimer les `500` sur `/planning` et `/time-clock`.
 - Le `500` planning venait d'un client Prisma Python encore chargé avant la migration; le redémarrage API/web a réaligné le runtime sans perte des plannings.
+- L'objectif hebdomadaire de planning s'édite maintenant en heures côté UI, tout en restant stocké en minutes en base.

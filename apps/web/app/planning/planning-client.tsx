@@ -115,6 +115,23 @@ function minutesToLabel(totalMinutes: number) {
   return `${hours}h${String(minutes).padStart(2, "0")}`;
 }
 
+function minutesToHoursInput(totalMinutes: number) {
+  return Number((Math.max(0, totalMinutes) / 60).toFixed(2)).toString();
+}
+
+function hoursInputToMinutes(value: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.round(parsed * 60);
+}
+
+function hoursToLabel(totalMinutes: number) {
+  const safe = Math.max(0, totalMinutes);
+  const hours = safe / 60;
+  const formatted = Number.isInteger(hours) ? hours.toFixed(0) : hours.toFixed(2).replace(".", ",");
+  return `${formatted} h`;
+}
+
 function timeRangeLabel(start: string | null, end: string | null) {
   if (!start || !end) return "—";
   return `${start} - ${end}`;
@@ -204,7 +221,7 @@ export function PlanningClient() {
         evening_start: normalizeTime(selected.evening_start),
         evening_end: normalizeTime(selected.evening_end),
         is_day_off: selected.is_day_off,
-        weekly_target_minutes: Number(selected.weekly_target_minutes || 0),
+        weekly_target_minutes: hoursInputToMinutes(selected.weekly_target_minutes),
         position: selected.position.trim(),
         comment: selected.comment.trim() || null,
       };
@@ -402,7 +419,7 @@ export function PlanningClient() {
                           </Td>
                           <Td className="min-w-[120px]">
                             <span className={cn("rounded-full px-2 py-1 text-xs", row.exceeds_objective ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" : "bg-muted text-foreground")}>
-                              {row.weekly_target_minutes ? minutesToLabel(row.weekly_target_minutes) : "Non défini"}
+                              {row.weekly_target_minutes ? hoursToLabel(row.weekly_target_minutes) : "Non défini"}
                             </span>
                           </Td>
                         </tr>
@@ -440,7 +457,7 @@ export function PlanningClient() {
                     <div className="text-right">
                       <p className={cn("text-sm font-medium", row.exceeds_objective ? "text-red-600 dark:text-red-400" : "text-foreground")}>Réel {minutesToLabel(row.actual_week_minutes)}</p>
                       <p className="text-xs text-foreground/55">Prévu {minutesToLabel(row.planned_week_minutes)}</p>
-                      <p className="text-xs text-foreground/55">Objectif {row.weekly_target_minutes ? minutesToLabel(row.weekly_target_minutes) : "non défini"}</p>
+                      <p className="text-xs text-foreground/55">Objectif {row.weekly_target_minutes ? hoursToLabel(row.weekly_target_minutes) : "non défini"}</p>
                     </div>
                   </div>
                   <div className="mt-4 grid gap-3">
@@ -505,7 +522,7 @@ function buildEditorForm(row: PlanningRow, day: PlanningRowDay, weekStart: strin
     evening_start: day.cell?.evening_start ?? "",
     evening_end: day.cell?.evening_end ?? "",
     is_day_off: day.cell?.is_day_off ?? false,
-    weekly_target_minutes: String(row.weekly_target_minutes ?? 0),
+    weekly_target_minutes: minutesToHoursInput(row.weekly_target_minutes ?? 0),
     position: row.position,
     comment: day.cell?.comment ?? row.comment ?? "",
   };
@@ -608,8 +625,8 @@ function EditorPanel({
           <input className="h-10 rounded-md border border-border bg-background px-3" value={form.position} onChange={(event) => setForm({ ...form, position: event.target.value })} />
         </label>
         <label className="grid gap-1 text-sm">
-          <span className="text-xs text-foreground/55">Objectif hebdomadaire en minutes</span>
-          <input className="h-10 rounded-md border border-border bg-background px-3" type="number" min={0} value={form.weekly_target_minutes} onChange={(event) => setForm({ ...form, weekly_target_minutes: event.target.value })} />
+          <span className="text-xs text-foreground/55">Objectif hebdomadaire en heures</span>
+          <input className="h-10 rounded-md border border-border bg-background px-3" type="number" min={0} step="0.25" value={form.weekly_target_minutes} onChange={(event) => setForm({ ...form, weekly_target_minutes: event.target.value })} />
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={form.is_day_off} onChange={(event) => setForm({ ...form, is_day_off: event.target.checked })} />

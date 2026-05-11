@@ -152,6 +152,7 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - La badgeuse compare les pointages avec la date Paris.
 - Le cache Next a ete purge puis le frontend redemarre apres les 500 sur `/planning` et `/time-clock`.
 - Le 500 provenait d'un client Prisma Python stale avant la migration; le redémarrage a réaligné le runtime sans suppression des plannings existants.
+- L'objectif hebdomadaire du planning se saisit maintenant en heures dans l'UI et est converti en minutes côté API.
 
 ## Prochaine reprise
 
