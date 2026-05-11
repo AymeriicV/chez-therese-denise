@@ -151,6 +151,7 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Les cellules de planning stockent `actualStart` et `actualEnd` pour garder la distinction prévu / réel.
 - La badgeuse compare les pointages avec la date Paris.
 - Le cache Next a ete purge puis le frontend redemarre apres les 500 sur `/planning` et `/time-clock`.
+- Le 500 provenait d'un client Prisma Python stale avant la migration; le redémarrage a réaligné le runtime sans suppression des plannings existants.
 
 ## Prochaine reprise
 

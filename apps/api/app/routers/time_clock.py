@@ -276,12 +276,20 @@ async def _sync_planning_from_time_clock(restaurant_id: str, user_id: str, clock
     day = next((item for item in getattr(schedule, "days", []) if item.weekday == local_clock_in.weekday()), None)
     clock_in_label = local_clock_in.strftime("%H:%M")
     clock_out_label = local_clock_out.strftime("%H:%M") if local_clock_out else None
-    should_create_or_update = day is None or day.isDayOff or (not day.morningStart and not day.eveningStart)
+    day_morning_start = _day_value(day, "morningStart", "morning_start")
+    day_morning_end = _day_value(day, "morningEnd", "morning_end")
+    day_actual_start = _day_value(day, "actualStart", "actual_start")
+    day_actual_end = _day_value(day, "actualEnd", "actual_end")
+    day_break_minutes = _day_value(day, "breakMinutes", "break_minutes") or 0
+    day_evening_start = _day_value(day, "eveningStart", "evening_start")
+    day_evening_end = _day_value(day, "eveningEnd", "evening_end")
+    day_is_day_off = _day_value(day, "isDayOff", "is_day_off")
+    should_create_or_update = day is None or day_is_day_off or (not day_morning_start and not day_evening_start)
     should_update_actual = bool(day and (clock_in_label or clock_out_label))
     if not should_create_or_update and not should_update_actual:
         return
 
-    if day is None or day.isDayOff or (not day.morningStart and not day.eveningStart):
+    if day is None or day_is_day_off or (not day_morning_start and not day_evening_start):
         day_data = {
             "morningStart": clock_in_label,
             "morningEnd": clock_out_label,
@@ -295,8 +303,8 @@ async def _sync_planning_from_time_clock(restaurant_id: str, user_id: str, clock
         }
     else:
         day_data = {
-            "actualStart": clock_in_label if not day.actualStart else day.actualStart,
-            "actualEnd": clock_out_label if clock_out_label else day.actualEnd,
+            "actualStart": clock_in_label if not day_actual_start else day_actual_start,
+            "actualEnd": clock_out_label if clock_out_label else day_actual_end,
             "isDayOff": False,
         }
 
@@ -312,3 +320,9 @@ async def _sync_planning_from_time_clock(restaurant_id: str, user_id: str, clock
 def _week_start(reference_date):
     monday = reference_date - timedelta(days=reference_date.weekday())
     return datetime.combine(monday, datetime.min.time(), UTC)
+
+
+def _day_value(day, camel: str, snake: str):
+    if day and hasattr(day, camel):
+        return getattr(day, camel)
+    return getattr(day, snake, None) if day else None

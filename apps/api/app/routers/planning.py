@@ -288,24 +288,32 @@ def _serialize_schedule(schedule, employee, week_start: datetime):
 
 
 def _serialize_day(day):
-    planned_minutes = _compute_day_total(day.morningStart, day.morningEnd, day.breakMinutes, day.eveningStart, day.eveningEnd, day.isDayOff)
-    actual_minutes = _compute_day_total(day.actualStart, day.actualEnd, day.breakMinutes, None, None, day.isDayOff)
-    display_minutes = actual_minutes if day.actualStart and day.actualEnd else planned_minutes
+    morning_start = _day_value(day, "morningStart", "morning_start")
+    morning_end = _day_value(day, "morningEnd", "morning_end")
+    actual_start = _day_value(day, "actualStart", "actual_start")
+    actual_end = _day_value(day, "actualEnd", "actual_end")
+    break_minutes = _day_value(day, "breakMinutes", "break_minutes") or 0
+    evening_start = _day_value(day, "eveningStart", "evening_start")
+    evening_end = _day_value(day, "eveningEnd", "evening_end")
+    is_day_off = _day_value(day, "isDayOff", "is_day_off")
+    planned_minutes = _compute_day_total(morning_start, morning_end, break_minutes, evening_start, evening_end, is_day_off)
+    actual_minutes = _compute_day_total(actual_start, actual_end, break_minutes, None, None, is_day_off)
+    display_minutes = actual_minutes if actual_start and actual_end else planned_minutes
     return {
         "id": day.id,
         "weekday": day.weekday,
-        "morning_start": day.morningStart,
-        "morning_end": day.morningEnd,
-        "actual_start": day.actualStart,
-        "actual_end": day.actualEnd,
-        "break_minutes": day.breakMinutes,
-        "evening_start": day.eveningStart,
-        "evening_end": day.eveningEnd,
-        "is_day_off": day.isDayOff,
+        "morning_start": morning_start,
+        "morning_end": morning_end,
+        "actual_start": actual_start,
+        "actual_end": actual_end,
+        "break_minutes": break_minutes,
+        "evening_start": evening_start,
+        "evening_end": evening_end,
+        "is_day_off": is_day_off,
         "comment": day.comment,
         "planned_minutes": planned_minutes,
         "actual_minutes": actual_minutes,
-        "difference_minutes": actual_minutes - planned_minutes if day.actualStart and day.actualEnd else 0,
+        "difference_minutes": actual_minutes - planned_minutes if actual_start and actual_end else 0,
         "total_minutes": display_minutes,
     }
 
@@ -431,3 +439,9 @@ def _range_minutes(start: str | None, end: str | None) -> int:
         return max(end_total - start_total, 0)
     except Exception:
         return 0
+
+
+def _day_value(day, camel: str, snake: str):
+    if hasattr(day, camel):
+        return getattr(day, camel)
+    return getattr(day, snake, None)

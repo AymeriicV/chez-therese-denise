@@ -534,3 +534,4 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - Les cellules de planning stockent désormais `actualStart` et `actualEnd` pour garder prévu et réel séparés.
 - La badgeuse compare les pointages au jour Paris, pas au jour UTC brut.
 - Le cache Next corrompu a été purgé puis le frontend redémarré pour supprimer les `500` sur `/planning` et `/time-clock`.
+- Le `500` planning venait d'un client Prisma Python encore chargé avant la migration; le redémarrage API/web a réaligné le runtime sans perte des plannings.
