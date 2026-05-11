@@ -19,6 +19,7 @@ from app.models.schemas import (
 )
 from app.routers.deps import get_restaurant_context, require_roles
 from app.services.audit import write_audit_log
+from app.services.produce_weights import normalize_recipe_unit_cost, suggest_recipe_unit
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 settings = get_settings()
@@ -406,7 +407,19 @@ async def _build_recipe_ingredient_data(recipe_id: str, payload: RecipeIngredien
         item = await db.inventoryitem.find_first(where={"id": payload.inventory_item_id, "restaurantId": restaurant_id})
         if not item:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory item not found")
-        unit_cost = payload.unit_cost if payload.unit_cost is not None else item.averageCost
+        suggested_unit = suggest_recipe_unit(
+            stock_unit=getattr(item, "unit", None),
+            average_weight_grams=getattr(item, "averageWeightGrams", None),
+            edible_yield_rate=getattr(item, "edibleYieldRate", None),
+        )
+        resolved_unit = payload.unit or suggested_unit
+        unit_cost = payload.unit_cost if payload.unit_cost is not None else normalize_recipe_unit_cost(
+            source_unit=getattr(item, "unit", None),
+            target_unit=resolved_unit,
+            base_unit_cost=item.averageCost,
+            average_weight_grams=getattr(item, "averageWeightGrams", None),
+            edible_yield_rate=getattr(item, "edibleYieldRate", None),
+        )
         quantity = payload.quantity
         waste_rate = payload.waste_rate
         return {
@@ -414,7 +427,7 @@ async def _build_recipe_ingredient_data(recipe_id: str, payload: RecipeIngredien
             "inventoryItemId": item.id,
             "name": payload.name or item.name,
             "quantity": quantity,
-            "unit": payload.unit or item.unit,
+            "unit": resolved_unit,
             "unitCostSnapshot": unit_cost,
             "wasteRate": waste_rate,
             "totalCost": _line_cost(quantity, unit_cost, waste_rate),
@@ -461,13 +474,25 @@ async def _build_sub_recipe_ingredient_data(sub_recipe_id: str, payload: RecipeI
         item = await db.inventoryitem.find_first(where={"id": payload.inventory_item_id, "restaurantId": restaurant_id})
         if not item:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory item not found")
-        unit_cost = payload.unit_cost if payload.unit_cost is not None else item.averageCost
+        suggested_unit = suggest_recipe_unit(
+            stock_unit=getattr(item, "unit", None),
+            average_weight_grams=getattr(item, "averageWeightGrams", None),
+            edible_yield_rate=getattr(item, "edibleYieldRate", None),
+        )
+        resolved_unit = payload.unit or suggested_unit
+        unit_cost = payload.unit_cost if payload.unit_cost is not None else normalize_recipe_unit_cost(
+            source_unit=getattr(item, "unit", None),
+            target_unit=resolved_unit,
+            base_unit_cost=item.averageCost,
+            average_weight_grams=getattr(item, "averageWeightGrams", None),
+            edible_yield_rate=getattr(item, "edibleYieldRate", None),
+        )
         return {
             "subRecipeId": sub_recipe_id,
             "inventoryItemId": item.id,
             "name": payload.name or item.name,
             "quantity": payload.quantity,
-            "unit": payload.unit or item.unit,
+            "unit": resolved_unit,
             "unitCostSnapshot": unit_cost,
             "wasteRate": payload.waste_rate,
             "totalCost": _line_cost(payload.quantity, unit_cost, payload.waste_rate),

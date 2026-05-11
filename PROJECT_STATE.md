@@ -493,3 +493,12 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - `docker compose exec web node -e \"fetch('http://localhost:3000/planning',{redirect:'manual'})\"`: HTTP 200.
 - `docker compose exec web node -e \"fetch('http://localhost:3000/team',{redirect:'manual'})\"`: HTTP 200.
 - `docker compose exec web node -e \"fetch('http://localhost:3000/time-clock',{redirect:'manual'})\"`: HTTP 200.
+
+## Etape 18 - Poids moyens produce
+
+- Referentiel local de poids moyens et de rendement ajoute pour les fruits et legumes courants.
+- Les articles vendus a la piece mais utilises en recettes en kg/g sont normalises automatiquement via `average_weight_grams` et `edible_yield_rate`.
+- Les fiches techniques coutent maintenant plus juste pour les produits comme chou-fleur, pomme de terre, oignon, tomate, courgette, agrumes et fruits courants.
+- Les articles stock exposes par `/inventory` retournent maintenant `average_weight_grams`, `edible_yield_rate` et `weight_source`.
+- Le moteur recette utilise la conversion piece -> kg/g pour calculer un cout ligne coherent avec la realite fournisseur.
+- L'interface stock permet de voir et de modifier ces donnees pour garder un override manuel quand c'est necessaire.

@@ -142,6 +142,9 @@ class InventoryItemCreate(BaseModel):
     quantity_on_hand: Decimal = Field(default=Decimal("0"), ge=0)
     reorder_point: Decimal = Field(default=Decimal("0"), ge=0)
     average_cost: Decimal = Field(default=Decimal("0"), ge=0)
+    average_weight_grams: Decimal | None = Field(default=None, ge=0)
+    edible_yield_rate: Decimal | None = Field(default=None, ge=0, le=1)
+    weight_source: str | None = None
     allergens: list[str] = Field(default_factory=list)
 
 
@@ -155,6 +158,9 @@ class InventoryItemUpdate(BaseModel):
     quantity_on_hand: Decimal | None = Field(default=None, ge=0)
     reorder_point: Decimal | None = Field(default=None, ge=0)
     average_cost: Decimal | None = Field(default=None, ge=0)
+    average_weight_grams: Decimal | None = Field(default=None, ge=0)
+    edible_yield_rate: Decimal | None = Field(default=None, ge=0, le=1)
+    weight_source: str | None = None
     allergens: list[str] | None = None
 
 

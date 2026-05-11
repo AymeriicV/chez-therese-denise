@@ -232,6 +232,9 @@ model InventoryItem {
   quantityOnHand Decimal         @default(0) @db.Decimal(12, 3)
   reorderPoint   Decimal         @default(0) @db.Decimal(12, 3)
   averageCost    Decimal         @default(0) @db.Decimal(12, 4)
+  averageWeightGrams Decimal?     @db.Decimal(12, 3)
+  edibleYieldRate Decimal?       @db.Decimal(5, 4)
+  weightSource   String?
   allergens      String[]        @default([])
   autoAllergens  String[]        @default([])
   isActive       Boolean         @default(true)

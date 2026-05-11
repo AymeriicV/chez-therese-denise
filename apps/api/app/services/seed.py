@@ -3,6 +3,7 @@ from decimal import Decimal
 from app.core.config import Settings
 from app.core.security import hash_password
 from app.db.prisma import db
+from app.services.produce_weights import suggest_inventory_weight_fields
 from app.routers.quality import ensure_restaurant_quality_defaults
 from app.services.allergens import detect_allergens, merge_allergens
 
@@ -53,6 +54,7 @@ async def seed_local_admin(settings: Settings) -> None:
         restaurant_ids.update(membership.restaurantId for membership in user_with_memberships.memberships)
     for restaurant_id in restaurant_ids:
         await _seed_lieu_noir(restaurant_id)
+        await _backfill_produce_weights(restaurant_id)
         await ensure_restaurant_quality_defaults(restaurant_id)
 
 
@@ -78,3 +80,32 @@ async def _seed_lieu_noir(restaurant_id: str) -> None:
         "archivedAt": None,
     }
     await db.inventoryitem.create(data={"restaurantId": restaurant_id, **item_data})
+
+
+async def _backfill_produce_weights(restaurant_id: str) -> None:
+    items = await db.inventoryitem.find_many(where={"restaurantId": restaurant_id})
+    for item in items:
+        current_weight_source = getattr(item, "weightSource", None)
+        if current_weight_source == "MANUAL":
+            continue
+        suggested = suggest_inventory_weight_fields(
+            name=item.name,
+            category=item.category,
+            average_weight_grams=getattr(item, "averageWeightGrams", None),
+            edible_yield_rate=getattr(item, "edibleYieldRate", None),
+            weight_source=current_weight_source,
+        )
+        if (
+            suggested["average_weight_grams"] == getattr(item, "averageWeightGrams", None)
+            and suggested["edible_yield_rate"] == getattr(item, "edibleYieldRate", None)
+            and suggested["weight_source"] == current_weight_source
+        ):
+            continue
+        await db.inventoryitem.update(
+            where={"id": item.id},
+            data={
+                "averageWeightGrams": suggested["average_weight_grams"],
+                "edibleYieldRate": suggested["edible_yield_rate"],
+                "weightSource": suggested["weight_source"],
+            },
+        )

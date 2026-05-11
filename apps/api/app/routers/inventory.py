@@ -14,6 +14,7 @@ from app.models.schemas import (
 from app.routers.deps import get_restaurant_context, require_roles
 from app.services.audit import write_audit_log
 from app.services.allergens import detect_allergens, merge_allergens
+from app.services.produce_weights import suggest_inventory_weight_fields
 from app.services.stock import create_stock_movement, ensure_supplier_belongs_to_restaurant
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
@@ -59,6 +60,13 @@ async def stock_summary(ctx=Depends(get_restaurant_context)):
 async def create_item(payload: InventoryItemCreate, ctx=Depends(require_roles("OWNER", "ADMIN", "MANAGER", "CHEF"))):
     await ensure_supplier_belongs_to_restaurant(payload.supplier_id, ctx["restaurant_id"])
     auto_allergens = detect_allergens(payload.name, payload.category)
+    weight_fields = suggest_inventory_weight_fields(
+        name=payload.name,
+        category=payload.category,
+        average_weight_grams=payload.average_weight_grams,
+        edible_yield_rate=payload.edible_yield_rate,
+        weight_source=payload.weight_source,
+    )
     item = await db.inventoryitem.create(
         data={
             "restaurantId": ctx["restaurant_id"],
@@ -71,6 +79,9 @@ async def create_item(payload: InventoryItemCreate, ctx=Depends(require_roles("O
             "quantityOnHand": payload.quantity_on_hand,
             "reorderPoint": payload.reorder_point,
             "averageCost": payload.average_cost,
+            "averageWeightGrams": weight_fields["average_weight_grams"],
+            "edibleYieldRate": weight_fields["edible_yield_rate"],
+            "weightSource": weight_fields["weight_source"],
             "allergens": merge_allergens(payload.allergens, auto_allergens),
             "autoAllergens": auto_allergens,
         },
@@ -107,6 +118,9 @@ async def update_item(
         "quantity_on_hand": "quantityOnHand",
         "reorder_point": "reorderPoint",
         "average_cost": "averageCost",
+        "average_weight_grams": "averageWeightGrams",
+        "edible_yield_rate": "edibleYieldRate",
+        "weight_source": "weightSource",
         "allergens": "allergens",
     }
     nullable_fields = {"sku", "supplierId", "storageArea"}
@@ -122,6 +136,21 @@ async def update_item(
         manual_allergens = payload.allergens if "allergens" in payload.model_fields_set else item.allergens
         data["allergens"] = merge_allergens(manual_allergens, auto_allergens)
         data["autoAllergens"] = auto_allergens
+    current_weight_source = getattr(item, "weightSource", None)
+    provided_weight_fields = {"average_weight_grams", "edible_yield_rate", "weight_source"} & payload.model_fields_set
+    if provided_weight_fields or current_weight_source != "MANUAL":
+        next_name = payload.name if payload.name is not None else item.name
+        next_category = payload.category if payload.category is not None else item.category
+        suggested = suggest_inventory_weight_fields(
+            name=next_name,
+            category=next_category,
+            average_weight_grams=payload.average_weight_grams if "average_weight_grams" in payload.model_fields_set else getattr(item, "averageWeightGrams", None),
+            edible_yield_rate=payload.edible_yield_rate if "edible_yield_rate" in payload.model_fields_set else getattr(item, "edibleYieldRate", None),
+            weight_source=payload.weight_source if "weight_source" in payload.model_fields_set else current_weight_source,
+        )
+        data["averageWeightGrams"] = suggested["average_weight_grams"]
+        data["edibleYieldRate"] = suggested["edible_yield_rate"]
+        data["weightSource"] = suggested["weight_source"]
     updated = await db.inventoryitem.update(
         where={"id": item.id},
         data=data,
@@ -194,6 +223,9 @@ def _serialize_item(item):
         "quantity_on_hand": item.quantityOnHand,
         "reorder_point": item.reorderPoint,
         "average_cost": item.averageCost,
+        "average_weight_grams": getattr(item, "averageWeightGrams", None),
+        "edible_yield_rate": getattr(item, "edibleYieldRate", None),
+        "weight_source": getattr(item, "weightSource", None),
         "stock_value": value,
         "allergens": item.allergens,
         "auto_allergens": item.autoAllergens,

@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 
 from app.db.prisma import db
 from app.services.allergens import detect_allergens, merge_allergens
+from app.services.produce_weights import suggest_inventory_weight_fields
 
 
 async def ensure_supplier_belongs_to_restaurant(supplier_id: str | None, restaurant_id: str) -> None:
@@ -58,6 +59,7 @@ async def apply_invoice_lines_to_stock(invoice, restaurant_id: str) -> int:
         unit_cost = line.unitPrice
         detected_allergens = detect_allergens(line.label, getattr(line, "unit", None))
         if not item:
+            weight_fields = suggest_inventory_weight_fields(name=line.label, category="Facture fournisseur")
             item = await db.inventoryitem.create(
                 data={
                     "restaurantId": restaurant_id,
@@ -68,6 +70,9 @@ async def apply_invoice_lines_to_stock(invoice, restaurant_id: str) -> int:
                     "quantityOnHand": Decimal("0"),
                     "reorderPoint": Decimal("0"),
                     "averageCost": unit_cost,
+                    "averageWeightGrams": weight_fields["average_weight_grams"],
+                    "edibleYieldRate": weight_fields["edible_yield_rate"],
+                    "weightSource": weight_fields["weight_source"],
                     "allergens": detected_allergens,
                     "autoAllergens": detected_allergens,
                 }

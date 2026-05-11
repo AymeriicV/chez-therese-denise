@@ -20,6 +20,9 @@ type StockItem = {
   quantity_on_hand: string;
   reorder_point: string;
   average_cost: string;
+  average_weight_grams: string | null;
+  edible_yield_rate: string | null;
+  weight_source: string | null;
   stock_value: string;
   allergens: string[];
   auto_allergens: string[];
@@ -37,6 +40,9 @@ type StockForm = {
   quantity_on_hand: string;
   reorder_point: string;
   average_cost: string;
+  average_weight_grams: string;
+  edible_yield_rate: string;
+  weight_source: string;
   allergens: string;
 };
 
@@ -49,6 +55,9 @@ const emptyForm: StockForm = {
   quantity_on_hand: "0",
   reorder_point: "0",
   average_cost: "0",
+  average_weight_grams: "",
+  edible_yield_rate: "",
+  weight_source: "",
   allergens: "",
 };
 
@@ -61,6 +70,9 @@ const fieldLabels: Record<keyof StockForm, string> = {
   quantity_on_hand: "Quantité en stock",
   reorder_point: "Seuil de réapprovisionnement",
   average_cost: "Coût moyen",
+  average_weight_grams: "Poids moyen brut (g)",
+  edible_yield_rate: "Rendement comestible",
+  weight_source: "Référence poids",
   allergens: "Allergènes",
 };
 
@@ -118,6 +130,9 @@ export function StockClient() {
       quantity_on_hand: item.quantity_on_hand,
       reorder_point: item.reorder_point,
       average_cost: item.average_cost,
+      average_weight_grams: item.average_weight_grams ?? "",
+      edible_yield_rate: item.edible_yield_rate ?? "",
+      weight_source: item.weight_source ?? "",
       allergens: item.allergens.join(", "),
     });
     setSelectedId(item.id);
@@ -152,6 +167,9 @@ export function StockClient() {
       quantity_on_hand: form.quantity_on_hand,
       reorder_point: form.reorder_point,
       average_cost: form.average_cost,
+      average_weight_grams: form.average_weight_grams || null,
+      edible_yield_rate: form.edible_yield_rate || null,
+      weight_source: form.weight_source || null,
       allergens: form.allergens.split(",").map((item) => item.trim()).filter(Boolean),
     };
     try {
@@ -286,6 +304,12 @@ export function StockClient() {
                           Détection automatique: {item.auto_allergens.join(", ")}
                         </p>
                       ) : null}
+                      {item.average_weight_grams ? (
+                        <p className="mt-1 inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs text-foreground/60">
+                          1 pièce ≈ {Number(item.average_weight_grams).toLocaleString("fr-FR")} g brut
+                          {item.edible_yield_rate ? ` · rendement ${Math.round(Number(item.edible_yield_rate) * 100)} %` : ""}
+                        </p>
+                      ) : null}
                     </div>
                   </button>
                   <div>
@@ -342,14 +366,60 @@ function StockEditor({ form, setForm, saving, onCancel, onSave }: { form: StockF
         <Button variant="ghost" size="icon" onClick={onCancel} aria-label="Fermer"><X className="h-4 w-4" /></Button>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {(Object.keys(form) as Array<keyof StockForm>).map((key) => (
-          <label key={key} className="grid gap-1 text-sm">
-            <span className="text-xs text-foreground/55">{fieldLabels[key]}</span>
-            <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" type={["quantity_on_hand", "reorder_point", "average_cost"].includes(key) ? "number" : "text"} value={form[key]} onChange={(event) => setField(key, event.target.value)} />
-          </label>
-        ))}
+        <label className="grid gap-1 text-sm">
+          <span className="text-xs text-foreground/55">{fieldLabels.name}</span>
+          <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" value={form.name} onChange={(event) => setField("name", event.target.value)} />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="text-xs text-foreground/55">{fieldLabels.category}</span>
+          <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" value={form.category} onChange={(event) => setField("category", event.target.value)} />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="text-xs text-foreground/55">{fieldLabels.unit}</span>
+          <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" value={form.unit} onChange={(event) => setField("unit", event.target.value)} />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="text-xs text-foreground/55">{fieldLabels.sku}</span>
+          <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" value={form.sku} onChange={(event) => setField("sku", event.target.value)} />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="text-xs text-foreground/55">{fieldLabels.storage_area}</span>
+          <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" value={form.storage_area} onChange={(event) => setField("storage_area", event.target.value)} />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="text-xs text-foreground/55">{fieldLabels.quantity_on_hand}</span>
+          <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" type="number" value={form.quantity_on_hand} onChange={(event) => setField("quantity_on_hand", event.target.value)} />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="text-xs text-foreground/55">{fieldLabels.reorder_point}</span>
+          <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" type="number" value={form.reorder_point} onChange={(event) => setField("reorder_point", event.target.value)} />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="text-xs text-foreground/55">{fieldLabels.average_cost}</span>
+          <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" type="number" value={form.average_cost} onChange={(event) => setField("average_cost", event.target.value)} />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="text-xs text-foreground/55">{fieldLabels.average_weight_grams}</span>
+          <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" type="number" value={form.average_weight_grams} onChange={(event) => setField("average_weight_grams", event.target.value)} placeholder="Ex: 1500" />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="text-xs text-foreground/55">{fieldLabels.edible_yield_rate}</span>
+          <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" type="number" step="0.01" min="0" max="1" value={form.edible_yield_rate} onChange={(event) => setField("edible_yield_rate", event.target.value)} placeholder="Ex: 0.60" />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="text-xs text-foreground/55">{fieldLabels.weight_source}</span>
+          <select className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" value={form.weight_source} onChange={(event) => setField("weight_source", event.target.value)}>
+            <option value="">Auto</option>
+            <option value="REFERENCE">Référence</option>
+            <option value="MANUAL">Manuel</option>
+          </select>
+        </label>
+        <label className="grid gap-1 text-sm sm:col-span-2">
+          <span className="text-xs text-foreground/55">{fieldLabels.allergens}</span>
+          <input className="h-10 rounded-md border border-border bg-background px-3 outline-none focus:ring-2 focus:ring-foreground" value={form.allergens} onChange={(event) => setField("allergens", event.target.value)} placeholder="Ex: poisson, lait" />
+        </label>
         <p className="sm:col-span-2 text-xs text-foreground/55">
-          Les allergènes détectés automatiquement depuis le nom et la catégorie sont ajoutés à la sauvegarde. Vous pouvez ajouter des allergènes manuels séparés par des virgules.
+          Les allergènes détectés automatiquement depuis le nom et la catégorie sont ajoutés à la sauvegarde. Les champs poids et rendement servent à convertir les articles vendus à la pièce en kg/g dans les fiches techniques.
         </p>
       </div>
       <div className="mt-4 flex justify-end gap-2">

@@ -46,6 +46,9 @@ type StockOption = {
   category: string;
   unit: string;
   average_cost: string;
+  average_weight_grams: string | null;
+  edible_yield_rate: string | null;
+  weight_source: string | null;
   allergens: string[];
   is_active: boolean;
 };
@@ -76,6 +79,66 @@ type IngredientForm = {
 
 const emptyRecipe: RecipeForm = { name: "", category: "", portion_yield: "1", selling_price: "0" };
 const emptyIngredient: IngredientForm = { inventory_item_id: "", quantity: "1", unit: "" };
+
+function normalizeUnit(value: string | null | undefined) {
+  if (!value) return "piece";
+  const normalized = value.toLowerCase().trim();
+  if (["piece", "pieces", "pcs", "pc", "u", "un", "unite", "unité"].includes(normalized)) return "piece";
+  if (["kg", "kilo", "kilos"].includes(normalized)) return "kg";
+  if (["g", "gr", "gramme", "grammes"].includes(normalized)) return "g";
+  if (["lt", "l", "litre", "litres"].includes(normalized)) return "lt";
+  if (["cl", "centilitre", "centilitres"].includes(normalized)) return "cl";
+  return normalized;
+}
+
+function getSuggestedIngredientUnit(item: StockOption) {
+  const stockUnit = normalizeUnit(item.unit);
+  const averageWeight = Number(item.average_weight_grams || 0);
+  if (stockUnit === "piece" && averageWeight > 0) return "kg";
+  if (stockUnit === "g") return "g";
+  if (["kg", "lt", "cl"].includes(stockUnit)) return stockUnit;
+  return averageWeight > 0 ? "kg" : item.unit;
+}
+
+function getConvertedUnitCost(item: StockOption, targetUnit: string) {
+  const baseUnitCost = Number(item.average_cost || 0);
+  const stockUnit = normalizeUnit(item.unit);
+  const normalizedTarget = normalizeUnit(targetUnit);
+  const averageWeight = Number(item.average_weight_grams || 0);
+  const yieldRate = Number(item.edible_yield_rate || 1) || 1;
+  if (stockUnit === normalizedTarget) return baseUnitCost;
+  if (["g", "kg"].includes(stockUnit) && ["g", "kg"].includes(normalizedTarget)) {
+    if (stockUnit === "kg" && normalizedTarget === "g") return baseUnitCost / 1000;
+    if (stockUnit === "g" && normalizedTarget === "kg") return baseUnitCost * 1000;
+    return baseUnitCost;
+  }
+  if (["lt", "cl", "l"].includes(stockUnit) && ["lt", "cl", "l"].includes(normalizedTarget)) {
+    if (["lt", "l"].includes(stockUnit) && normalizedTarget === "cl") return baseUnitCost / 100;
+    if (stockUnit === "cl" && ["lt", "l"].includes(normalizedTarget)) return baseUnitCost * 100;
+    return baseUnitCost;
+  }
+  if (stockUnit === "piece" && ["g", "kg"].includes(normalizedTarget) && averageWeight > 0) {
+    const edibleGrams = averageWeight * yieldRate;
+    if (edibleGrams <= 0) return baseUnitCost;
+    const costPerGram = baseUnitCost / edibleGrams;
+    return normalizedTarget === "g" ? costPerGram : costPerGram * 1000;
+  }
+  if (normalizedTarget === "piece" && ["g", "kg"].includes(stockUnit) && averageWeight > 0) {
+    const edibleGrams = averageWeight * yieldRate;
+    if (edibleGrams <= 0) return baseUnitCost;
+    if (stockUnit === "kg") return baseUnitCost * (edibleGrams / 1000);
+    return baseUnitCost * edibleGrams;
+  }
+  return baseUnitCost;
+}
+
+function formatWeightHint(item: StockOption) {
+  const averageWeight = Number(item.average_weight_grams || 0);
+  if (!averageWeight) return "";
+  const yieldRate = Number(item.edible_yield_rate || 0);
+  const yieldLabel = yieldRate > 0 && yieldRate < 1 ? ` · rendement ${Math.round(yieldRate * 100)} %` : "";
+  return `≈ ${averageWeight.toLocaleString("fr-FR")} g brut / pièce${yieldLabel}`;
+}
 
 export function RecipesClient() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -119,7 +182,7 @@ export function RecipesClient() {
       .slice(0, 8);
   }, [deferredIngredientSearch, sourceMode, stockItems, subRecipes]);
   const previewCost = selectedStockItem
-    ? Number(ingredientForm.quantity || 0) * Number(selectedStockItem.average_cost || 0)
+    ? Number(ingredientForm.quantity || 0) * getConvertedUnitCost(selectedStockItem, ingredientForm.unit || getSuggestedIngredientUnit(selectedStockItem))
     : selectedSubRecipeItem
       ? Number(ingredientForm.quantity || 0) * Number(selectedSubRecipeItem.cost_per_unit || 0)
       : 0;
@@ -190,7 +253,10 @@ export function RecipesClient() {
     setIngredientForm((current) => {
       const next = { ...current, [field]: value };
       if (field === "inventory_item_id") {
-        next.unit = stockItems.find((item) => item.id === value)?.unit ?? current.unit;
+        const stockItem = stockItems.find((item) => item.id === value);
+        if (stockItem) {
+          next.unit = getSuggestedIngredientUnit(stockItem);
+        }
         const subRecipe = subRecipes.find((item) => item.id === value);
         if (subRecipe) {
           next.unit = subRecipe.batch_unit;
@@ -209,7 +275,7 @@ export function RecipesClient() {
     setIngredientForm((current) => ({
       ...current,
       inventory_item_id: option.id,
-      unit: "average_cost" in option ? option.unit : option.batch_unit,
+      unit: "average_cost" in option ? getSuggestedIngredientUnit(option) : option.batch_unit,
     }));
     setIngredientSearch(option.name);
   }
@@ -349,7 +415,7 @@ export function RecipesClient() {
     setSaving(true);
     try {
       const isStock = "average_cost" in targetOption;
-      const resolvedUnit = ingredientForm.unit || (isStock ? targetOption.unit : targetOption.batch_unit) || "kg";
+      const resolvedUnit = ingredientForm.unit || (isStock ? getSuggestedIngredientUnit(targetOption) : targetOption.batch_unit) || "kg";
       const body = JSON.stringify({
         inventory_item_id: isStock ? targetOption.id : null,
         sub_recipe_id: isStock ? null : targetOption.id,
@@ -740,9 +806,12 @@ export function RecipesClient() {
                                   <p className="truncate text-sm font-medium">{item.name}</p>
                                   <p className="truncate text-xs text-foreground/55">
                                     {"average_cost" in item
-                                      ? `${item.category} · ${item.unit} · ${Number(item.average_cost || 0).toFixed(2)} EUR`
+                                      ? `${item.category} · ${getSuggestedIngredientUnit(item)} · ${Number(item.average_cost || 0).toFixed(2)} EUR`
                                       : `${item.category ?? "Sans catégorie"} · ${item.batch_unit} · ${Number(item.cost_per_unit || 0).toFixed(2)} EUR`}
                                   </p>
+                                  {"average_cost" in item && formatWeightHint(item) ? (
+                                    <p className="truncate text-xs text-foreground/45">{formatWeightHint(item)}</p>
+                                  ) : null}
                                 </div>
                                 <span className="text-xs text-foreground/55">{item.allergens.join(", ") || "Sans allergène"}</span>
                               </button>
@@ -758,6 +827,11 @@ export function RecipesClient() {
                           <p className="text-xs text-foreground/55">Coût ligne</p>
                           <p className="font-semibold">{previewCost.toFixed(2)} EUR</p>
                           <p className="text-xs text-foreground/55">{selectedIngredientOption ? selectedIngredientOption.allergens.join(", ") || "Sans allergène" : "Choisissez un article ou une sous-recette"}</p>
+                          {selectedStockItem ? (
+                            <p className="mt-1 text-xs text-foreground/45">
+                              {formatWeightHint(selectedStockItem) || "Poids moyen non renseigné"}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
 

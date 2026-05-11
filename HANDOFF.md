@@ -114,6 +114,14 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Factures: `GET /invoices` expose maintenant les metadonnees fichier, le document original securise, les filtres/recherches, la correction manuelle des lignes et la validation avec creation des mouvements stock uniquement apres approbation.
 - Factures: l'upload impose le fournisseur, le fichier original est persistant dans `uploads`, et le document reste consultable apres rebuild Docker.
 
+## Derniere correction
+
+- Referentiel poids produce: ajout des champs `average_weight_grams`, `edible_yield_rate` et `weight_source` sur les articles stock.
+- Produits piece -> kg/g: la fiche technique convertit maintenant le cout d'un article piece vers kg/g quand un poids moyen existe.
+- Produits piece -> kg/g: la recherche d'article dans `/recipes` affiche un indicateur de poids brut et suggere automatiquement l'unite de recette la plus coherent.
+- Produits piece -> kg/g: le stock peut etre modifie manuellement avec un poids de reference ou un override `MANUAL`.
+- Produits piece -> kg/g: le seed backfill les articles deja existants sur le reseau local.
+
 ## Prochaine reprise
 
 Continuer avec commandes fournisseurs, ou reprendre sous-recettes avancees, couts matieres, marges et allergenes consolides. Garder la meme regle: aucun bouton decoratif, mutations branchees API, erreurs visibles et state UI mis a jour depuis les reponses backend.
