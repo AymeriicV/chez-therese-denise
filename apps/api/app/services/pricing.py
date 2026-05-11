@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from uuid import uuid4
 
 from app.db.prisma import db
 from app.services.company_settings import get_company_settings_snapshot
@@ -18,41 +19,91 @@ async def record_invoice_price_history_and_alerts(invoice, restaurant_id: str) -
             continue
         previous = await _latest_price_history(restaurant_id, line.inventoryItemId, invoice.supplierId)
         current_price = line.unitPrice or Decimal("0")
-        history = await db.pricehistory.create(
-            data={
-                "restaurant": {"connect": {"id": restaurant_id}},
-                "supplierId": invoice.supplierId,
-                "inventoryItemId": line.inventoryItemId,
-                "invoiceId": invoice.id,
-                "invoiceLineId": line.id,
-                "codeArticle": line.codeArticle,
-                "sourceLabel": line.label,
-                "unitPrice": current_price,
-                "quantity": line.quantity,
-                "variationPercent": _variation_percent(previous.unitPrice if previous else None, current_price),
-                "createdAt": invoice_date,
-            }
+        await db.execute_raw(
+            """
+            INSERT INTO "PriceHistory" (
+                "id",
+                "restaurantId",
+                "supplierId",
+                "inventoryItemId",
+                "invoiceId",
+                "invoiceLineId",
+                "codeArticle",
+                "sourceLabel",
+                "unitPrice",
+                "quantity",
+                "variationPercent",
+                "createdAt"
+            ) VALUES (
+                $12,
+                $1, $2, $3, $4, $5, $6, $7,
+                $8::numeric(12,4),
+                $9::numeric(12,3),
+                $10::numeric(8,4),
+                $11::timestamp
+            )
+            """,
+            restaurant_id,
+            invoice.supplierId,
+            line.inventoryItemId,
+            invoice.id,
+            line.id,
+            line.codeArticle,
+            line.label,
+            current_price,
+            line.quantity,
+            _variation_percent(previous.unitPrice if previous else None, current_price),
+            invoice_date,
+            str(uuid4()),
         )
         if previous and previous.unitPrice > 0:
             variation = (current_price - previous.unitPrice) / previous.unitPrice
             if variation >= threshold_percent:
-                alert = await db.pricealert.create(
-                    data={
-                        "restaurant": {"connect": {"id": restaurant_id}},
-                        "supplierId": invoice.supplierId,
-                        "inventoryItemId": line.inventoryItemId,
-                        "invoiceId": invoice.id,
-                        "invoiceLineId": line.id,
-                        "previousUnitPrice": previous.unitPrice,
-                        "newUnitPrice": current_price,
-                        "variationPercent": variation,
-                        "thresholdPercent": threshold_percent,
-                        "status": "NEW",
-                        "message": f"Hausse prix fournisseur: {line.label}",
-                        "createdAt": datetime.now(UTC),
-                    }
+                rows = await db.query_raw(
+                    """
+                    INSERT INTO "PriceAlert" (
+                        "id",
+                        "restaurantId",
+                        "supplierId",
+                        "inventoryItemId",
+                        "invoiceId",
+                        "invoiceLineId",
+                        "previousUnitPrice",
+                        "newUnitPrice",
+                        "variationPercent",
+                        "thresholdPercent",
+                        "status",
+                        "message",
+                        "createdAt"
+                    ) VALUES (
+                        $13,
+                        $1, $2, $3, $4, $5,
+                        $6::numeric(12,4),
+                        $7::numeric(12,4),
+                        $8::numeric(8,4),
+                        $9::numeric(8,4),
+                        $10,
+                        $11,
+                        $12::timestamp
+                    )
+                    RETURNING "id"
+                    """,
+                    restaurant_id,
+                    invoice.supplierId,
+                    line.inventoryItemId,
+                    invoice.id,
+                    line.id,
+                    previous.unitPrice,
+                    current_price,
+                    variation,
+                    threshold_percent,
+                    "NEW",
+                    f"Hausse prix fournisseur: {line.label}",
+                    datetime.now(UTC),
+                    str(uuid4()),
                 )
-                created_alert_ids.append(alert.id)
+                if rows:
+                    created_alert_ids.append(rows[0]["id"])
     return created_alert_ids
 
 
