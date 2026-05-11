@@ -154,6 +154,13 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Le 500 provenait d'un client Prisma Python stale avant la migration; le redémarrage a réaligné le runtime sans suppression des plannings existants.
 - L'objectif hebdomadaire du planning se saisit maintenant en heures dans l'UI et est converti en minutes côté API.
 
+## Derniere correction
+
+- Le shell frontend ne rend plus d'écran texte de redirection pendant l'hydration; il affiche un rendu neutre jusqu'à validation de la session.
+- Le `body` du layout racine est protégé avec `suppressHydrationWarning` pour éviter les faux positifs liés aux attributs injectés par le navigateur en dev.
+- Le module IA a été retiré de la navigation et la route `/ai` supprimée.
+- Les compteurs de tuiles du dashboard sont remis à `0` pour éviter les chiffres de développement résiduels.
+
 ## Prochaine reprise
 
 Continuer avec commandes fournisseurs, ou reprendre sous-recettes avancees, couts matieres, marges et allergenes consolides. Garder la meme regle: aucun bouton decoratif, mutations branchees API, erreurs visibles et state UI mis a jour depuis les reponses backend.

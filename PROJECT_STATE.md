@@ -536,3 +536,10 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - Le cache Next corrompu a été purgé puis le frontend redémarré pour supprimer les `500` sur `/planning` et `/time-clock`.
 - Le `500` planning venait d'un client Prisma Python encore chargé avant la migration; le redémarrage API/web a réaligné le runtime sans perte des plannings.
 - L'objectif hebdomadaire de planning s'édite maintenant en heures côté UI, tout en restant stocké en minutes en base.
+
+## Etape 24 - Shell frontend et suppression IA
+
+- La barre applicative ne rend plus d'écran texte de redirection pendant l'hydration; le shell attend maintenant la validation de session avec un rendu neutre et stable.
+- Le `body` du layout racine utilise aussi `suppressHydrationWarning` pour éviter les faux positifs liés aux attributs injectés par le navigateur en dev.
+- Le module IA a été retiré de la navigation et la route `/ai` a été supprimée.
+- Les compteurs affichés dans les tuiles de dashboard sont remis à `0` pour éviter les chiffres de développement résiduels; seul le nom du restaurant reste affiché sur la tuile paramètres.

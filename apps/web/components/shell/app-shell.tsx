@@ -9,7 +9,7 @@ import { getSessionRole, getStoredToken, redirectToLogin } from "@/lib/api";
 const EMPLOYEE_ALLOWED = ["/planning", "/time-clock"];
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const [hasSession, setHasSession] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -23,19 +23,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       window.location.assign("/planning");
       return;
     }
-    setHasSession(true);
+    setIsReady(true);
   }, [pathname]);
 
-  if (!hasSession) {
-    return (
-      <div className="grid min-h-screen place-items-center bg-background px-4 text-sm text-foreground/60">
-        Redirection vers la connexion...
-      </div>
-    );
+  if (!isReady) {
+    return <div suppressHydrationWarning className="min-h-screen bg-background" />;
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
+    <div suppressHydrationWarning className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <div className="flex">
         <Sidebar />
         <main className="min-w-0 flex-1 overflow-x-hidden pb-20 lg:pb-0">{children}</main>

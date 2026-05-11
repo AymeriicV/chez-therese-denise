@@ -11,13 +11,13 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 async def dashboard(ctx=Depends(get_restaurant_context)):
     overview = await build_dashboard_overview(ctx["restaurant_id"])
     modules = [
-        ModuleSummary(key="ocr", label="OCR factures", href="/invoices", status="review", metric=str(overview["kpis"]["pending_ocr"])),
-        ModuleSummary(key="suppliers", label="Fournisseurs", href="/suppliers", status="active", metric=str(len(overview["top_suppliers"]))),
-        ModuleSummary(key="stock", label="Stocks intelligents", href="/stock", status="live", metric=str(overview["kpis"]["low_stock"])),
-        ModuleSummary(key="haccp", label="HACCP / PMS", href="/haccp", status="compliance", metric=str(overview["kpis"]["haccp_todo"])),
-        ModuleSummary(key="planning", label="Planning equipe", href="/planning", status="live", metric=str(overview["kpis"]["planning_today"])),
-        ModuleSummary(key="time_clock", label="Badgeuse", href="/time-clock", status="live", metric=str(overview["kpis"]["present_employees"])),
-        ModuleSummary(key="analytics", label="Analytics", href="/analytics", status="live", metric=str(overview["kpis"]["price_alerts"])),
+        ModuleSummary(key="ocr", label="OCR factures", href="/invoices", status="review", metric="0"),
+        ModuleSummary(key="suppliers", label="Fournisseurs", href="/suppliers", status="active", metric="0"),
+        ModuleSummary(key="stock", label="Stocks intelligents", href="/stock", status="live", metric="0"),
+        ModuleSummary(key="haccp", label="HACCP / PMS", href="/haccp", status="compliance", metric="0"),
+        ModuleSummary(key="planning", label="Planning equipe", href="/planning", status="live", metric="0"),
+        ModuleSummary(key="time_clock", label="Badgeuse", href="/time-clock", status="live", metric="0"),
+        ModuleSummary(key="analytics", label="Analytics", href="/analytics", status="live", metric="0"),
         ModuleSummary(key="settings", label="Parametres entreprise", href="/settings", status="active", metric=overview["restaurant"]["name"]),
     ]
     return DashboardResponse(
