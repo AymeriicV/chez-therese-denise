@@ -38,6 +38,7 @@ Pour reprendre apres interruption:
 - [x] 17 - Equipe, planning et badgeuse avec roles et acces limites
 - [x] 18 - Archivage factures fournisseurs et OCR guide par fournisseur
 - [x] 19 - Refonte UX/UI premium du module fiches techniques
+- [x] 20 - Dashboard reel, analytics et parametres entreprise
 
 ## Modules cible
 
@@ -45,7 +46,7 @@ Dashboard, OCR factures fournisseurs, fournisseurs, stocks, inventaires, fiches 
 
 ## Dernier commit attendu
 
-Archivage factures fournisseurs et OCR guide par fournisseur.
+Dashboard reel, analytics et parametres entreprise.
 
 ## Commandes etape 02
 
@@ -98,6 +99,10 @@ open http://localhost:3000/suppliers
 - `pnpm --version`: non execute, `pnpm` absent de l'environnement hote. Les conteneurs utilisent Corepack.
 - `tsc --version`: non execute, `tsc` absent de l'environnement hote.
 - `git push origin main`: OK apres etape 07.
+- `docker compose exec -T api prisma generate --schema /app/packages/db/prisma/schema.prisma`: OK apres etape 20.
+- `docker compose exec -T api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma`: OK apres etape 20.
+- `docker compose exec -T web pnpm --filter @ctd/web build`: OK apres etape 20.
+- `docker compose ps`: `ctd-api`, `ctd-web`, `ctd-postgres` UP apres etape 20.
 
 ## Commandes etape 18
 
@@ -125,6 +130,25 @@ curl -I http://localhost:3000/invoices
 - L'interface mobile expose maintenant un menu complet, la page HACCP replie ses sous-categories par defaut, les fiches techniques proposent une vraie recherche d'articles, et la badgeuse affiche l'heure courante plus le dernier badge.
 - `/recipes` a ete refondu en vue premium en trois zones: sidebar recettes, zone detail avec photo persistante et KPIs, et panneau ingredients intelligent avec recherche, sous-recettes, drag-and-drop et import photo.
 - Le backend recettes expose maintenant la photo persistante, l'ordre des ingredients et un endpoint de reorganisation pour garder la base synchronisee avec l'UI.
+
+## Commandes etape 20
+
+```bash
+docker compose exec -T api prisma generate --schema /app/packages/db/prisma/schema.prisma
+docker compose exec -T api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma
+docker compose exec -T web pnpm --filter @ctd/web build
+docker compose up --build -d
+```
+
+## Etape 20 - Details
+
+- `/dashboard` n'est plus statique: toutes les cartes, alertes, courbes et actions rapides viennent des vrais agrégats API.
+- `/analytics` devient une page de pilotage decisionnelle avec evolution achats, food cost, marges, production, stock, temps equipe, HACCP et alertes prix.
+- Les alertes prix sont maintenant persistees via `PriceHistory` et `PriceAlert`, avec seuil configurable dans les parametres entreprise.
+- `/settings` devient une vraie page de configuration restaurant: identite, roles, HACCP, stock, OCR, alertes prix, L'Addition et imprimantes.
+- `/ai` reste une page propre de mise en attente, sans moteur IA pour l'instant.
+- La migration ajoute aussi les champs entreprise necessaires sur `Restaurant` pour adresser, contact, TVA, logo et horaires.
+- La page dashboard et la page analytics restent alimentees uniquement par l'API et par les donnees du restaurant courant.
 
 ## Validation etape 18
 

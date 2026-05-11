@@ -20,6 +20,13 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 
 ## Ce qui vient d'etre termine
 
+- Dashboard reel connecte aux vraies donnees du SaaS: factures, stock, HACCP, production, planning, activite recente et alertes prix.
+- Page analytics operationnelle: evolution achats, variations de prix, food cost, marges, production, stock, temps equipe et alertes prix persistantes.
+- Page settings operationnelle: infos restaurant, roles, HACCP, stock, OCR, alertes prix, L'Addition et imprimantes restaurant.
+- Les prix valides sur facture creent maintenant `PriceHistory` et `PriceAlert` pour alimenter dashboard et analytics.
+- Les endpoints `/dashboard/overview`, `/analytics/overview`, `/analytics/price-alerts` et `/settings/company` sont branchés au backend.
+- `/ai` reste une page placeholder propre en attendant le moteur IA final.
+- Les migrations Prisma ajoutees pour ces blocs sont appliquees dans Docker.
 - Correction des faux `Failed to fetch` apres mutations: les pages utilisent l'objet retourne par l'API au lieu de transformer un refresh secondaire en erreur de sauvegarde.
 - Headers API centralises: `Authorization: Bearer <token>` et `X-Restaurant-Id` restent portes par `apiRequest`.
 - Detection automatique allergenes stock cote backend.
@@ -54,6 +61,14 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - Sur mobile, la navigation passe par un menu complet; dans `HACCP`, les sous-categories sont cachees tant que l'utilisateur n'ouvre pas le bloc; dans `Recipes`, l'ajout d'ingredient passe par une recherche d'article au lieu d'une liste brute; dans `Time Clock`, l'heure courante et le dernier badge sont visibles en meme temps.
 - `/recipes` a ete refondu en experience premium avec trois zones: sidebar recettes, fiche detaillee au centre avec photo persistante et KPIs, et panneau ingredients intelligent avec recherche type commande palette, sous-recettes, drag-and-drop et ajout rapide.
 - Le backend recettes stocke maintenant la photo de fiche, l'ordre des ingredients et accepte la reorganisation persistante des lignes.
+
+## Validation derniere passe
+
+- `docker compose exec -T api prisma generate --schema /app/packages/db/prisma/schema.prisma`: OK.
+- `docker compose exec -T api prisma migrate deploy --schema /app/packages/db/prisma/schema.prisma`: OK.
+- `docker compose exec -T web pnpm --filter @ctd/web build`: OK.
+- `docker compose ps`: `ctd-api`, `ctd-web`, `ctd-postgres` sont UP.
+- Les routes `/dashboard`, `/analytics`, `/settings` et `/ai` sont presentes dans le build Next.
 
 ## Validation realisee
 

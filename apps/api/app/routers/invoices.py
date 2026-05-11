@@ -13,6 +13,7 @@ from app.models.schemas import InvoiceRejectRequest, InvoiceUpdateRequest
 from app.routers.deps import get_restaurant_context, require_roles
 from app.services.audit import write_audit_log
 from app.services.ocr import InvoiceOcrService
+from app.services.pricing import record_invoice_price_history_and_alerts
 from app.services.stock import apply_invoice_lines_to_stock
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
@@ -233,6 +234,7 @@ async def approve_invoice(invoice_id: str, ctx=Depends(require_roles("OWNER", "A
     if invoice.status != "OCR_REVIEW":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La facture doit être analysée avant validation")
     applied_lines = await apply_invoice_lines_to_stock(invoice, ctx["restaurant_id"])
+    alert_ids = await record_invoice_price_history_and_alerts(invoice, ctx["restaurant_id"])
     updated = await db.supplierinvoice.update(
         where={"id": invoice.id},
         data={"status": "APPROVED", "approvedAt": datetime.now(UTC), "rejectedReason": None},
@@ -245,7 +247,7 @@ async def approve_invoice(invoice_id: str, ctx=Depends(require_roles("OWNER", "A
     )
     if updated.template:
         await _learn_template_from_corrections(updated.template.id, invoice, updated)
-    await _audit(ctx, "invoice.approved", invoice.id, {"stockLinesApplied": applied_lines})
+    await _audit(ctx, "invoice.approved", invoice.id, {"stockLinesApplied": applied_lines, "priceAlertIds": alert_ids})
     return _serialize_invoice(updated, ctx["restaurant_id"])
 
 

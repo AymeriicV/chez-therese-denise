@@ -1,8 +1,7 @@
-import { ModulePage } from "@/components/modules/module-page";
-import { getModuleByHref } from "@/lib/modules";
+import { SettingsClient } from "./settings-client";
 
 export const dynamic = "force-dynamic";
 
 export default function Page() {
-  return <ModulePage module={getModuleByHref("/settings")!} />;
+  return <SettingsClient />;
 }

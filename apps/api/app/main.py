@@ -6,7 +6,7 @@ from fastapi.responses import ORJSONResponse
 
 from app.core.config import get_settings
 from app.db.prisma import connect_db, disconnect_db
-from app.routers import auth, dashboard, inventory, invoices, orders, planning, production, quality, realtime, recipes, suppliers, team, time_clock
+from app.routers import auth, analytics, dashboard, inventory, invoices, orders, planning, production, quality, realtime, recipes, settings, suppliers, team, time_clock
 from app.services.seed import seed_local_admin
 
 
@@ -41,6 +41,7 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
+app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(suppliers.router, prefix="/api/v1")
 app.include_router(team.router, prefix="/api/v1")
 app.include_router(planning.router, prefix="/api/v1")
@@ -50,6 +51,7 @@ app.include_router(recipes.router, prefix="/api/v1")
 app.include_router(production.router, prefix="/api/v1")
 app.include_router(orders.router, prefix="/api/v1")
 app.include_router(invoices.router, prefix="/api/v1")
+app.include_router(settings.router, prefix="/api/v1")
 app.include_router(quality.router, prefix="/api/v1")
 app.include_router(realtime.router, prefix="/api/v1")
 

@@ -1,45 +1,34 @@
-from datetime import UTC, datetime
-
 from fastapi import APIRouter, Depends
 
-from app.db.prisma import db
-from app.models.schemas import DashboardResponse, ModuleSummary
+from app.models.schemas import DashboardResponse, DashboardOverviewOut, ModuleSummary
 from app.routers.deps import get_restaurant_context
+from app.services.insights import build_dashboard_overview
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
-MODULES = [
-    ("ocr", "OCR factures", "/invoices", "review"),
-    ("suppliers", "Fournisseurs", "/suppliers", "active"),
-    ("stock", "Stocks intelligents", "/stock", "live"),
-    ("haccp", "HACCP / PMS", "/haccp", "compliance"),
-    ("planning", "Planning equipe", "/planning", "live"),
-    ("time_clock", "Badgeuse", "/time-clock", "live"),
-    ("analytics", "Analytics", "/analytics", "live"),
-    ("ai", "IA predictive", "/ai", "soon"),
-    ("settings", "Parametres entreprise", "/settings", "active"),
-]
-
-
 @router.get("", response_model=DashboardResponse)
 async def dashboard(ctx=Depends(get_restaurant_context)):
-    restaurant_id = ctx["restaurant_id"]
-    restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
-    supplier_count = await db.supplier.count(where={"restaurantId": restaurant_id})
-    invoice_count = await db.supplierinvoice.count(where={"restaurantId": restaurant_id})
-    item_count = await db.inventoryitem.count(where={"restaurantId": restaurant_id})
-    notification_count = await db.notification.count(where={"restaurantId": restaurant_id, "readAt": None})
-
+    overview = await build_dashboard_overview(ctx["restaurant_id"])
+    modules = [
+        ModuleSummary(key="ocr", label="OCR factures", href="/invoices", status="review", metric=str(overview["kpis"]["pending_ocr"])),
+        ModuleSummary(key="suppliers", label="Fournisseurs", href="/suppliers", status="active", metric=str(len(overview["top_suppliers"]))),
+        ModuleSummary(key="stock", label="Stocks intelligents", href="/stock", status="live", metric=str(overview["kpis"]["low_stock"])),
+        ModuleSummary(key="haccp", label="HACCP / PMS", href="/haccp", status="compliance", metric=str(overview["kpis"]["haccp_todo"])),
+        ModuleSummary(key="planning", label="Planning equipe", href="/planning", status="live", metric=str(overview["kpis"]["planning_today"])),
+        ModuleSummary(key="time_clock", label="Badgeuse", href="/time-clock", status="live", metric=str(overview["kpis"]["present_employees"])),
+        ModuleSummary(key="analytics", label="Analytics", href="/analytics", status="live", metric=str(overview["kpis"]["price_alerts"])),
+        ModuleSummary(key="ai", label="IA predictive", href="/ai", status="soon", metric=str(overview["kpis"]["price_alerts"])),
+        ModuleSummary(key="settings", label="Parametres entreprise", href="/settings", status="active", metric=overview["restaurant"]["name"]),
+    ]
     return DashboardResponse(
-        restaurant={"id": restaurant.id, "name": restaurant.name, "timezone": restaurant.timezone},
-        kpis={
-            "suppliers": supplier_count,
-            "invoices": invoice_count,
-            "inventory_items": item_count,
-            "unread_notifications": notification_count,
-            "estimated_margin_rate": 0.714,
-        },
-        modules=[ModuleSummary(key=k, label=l, href=h, status=s) for k, l, h, s in MODULES],
-        generated_at=datetime.now(UTC),
+        restaurant=overview["restaurant"],
+        kpis=overview["kpis"],
+        modules=modules,
+        generated_at=overview["generated_at"],
     )
+
+
+@router.get("/overview", response_model=DashboardOverviewOut)
+async def dashboard_overview(ctx=Depends(get_restaurant_context)):
+    return await build_dashboard_overview(ctx["restaurant_id"])

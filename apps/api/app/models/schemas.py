@@ -220,6 +220,79 @@ class RecipeIngredientsReorderRequest(BaseModel):
     ingredient_ids: list[str] = Field(default_factory=list)
 
 
+class RestaurantSettingsUpdate(BaseModel):
+    name: str | None = None
+    legal_name: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    email: EmailStr | None = None
+    siret: str | None = None
+    vat_number: str | None = None
+    logo_url: str | None = None
+    opening_hours: dict[str, Any] | None = None
+
+
+class CompanySettingsUpdate(BaseModel):
+    restaurant: RestaurantSettingsUpdate | None = None
+    brand_name: str | None = None
+    invoice_email: EmailStr | None = None
+    haccp_manager: str | None = None
+    settings: dict[str, Any] | None = None
+
+
+class CompanySettingsOut(BaseModel):
+    restaurant: dict[str, Any]
+    company: dict[str, Any]
+    settings: dict[str, Any]
+
+
+class PriceAlertOut(BaseModel):
+    id: str
+    supplier_id: str | None = None
+    supplier_name: str | None = None
+    inventory_item_id: str | None = None
+    inventory_item_name: str | None = None
+    invoice_id: str | None = None
+    invoice_number: str | None = None
+    previous_unit_price: Decimal
+    new_unit_price: Decimal
+    variation_percent: Decimal
+    threshold_percent: Decimal
+    status: str
+    message: str | None = None
+    created_at: datetime
+    viewed_at: datetime | None = None
+    resolved_at: datetime | None = None
+
+
+class DashboardOverviewOut(BaseModel):
+    restaurant: dict[str, Any]
+    kpis: dict[str, Any]
+    alerts: dict[str, Any]
+    quick_actions: list[dict[str, Any]]
+    chart: dict[str, Any]
+    top_suppliers: list[dict[str, Any]]
+    top_price_increases: list[dict[str, Any]]
+    tasks_today: list[dict[str, Any]]
+    recent_activity: list[dict[str, Any]]
+    generated_at: datetime
+
+
+class AnalyticsOverviewOut(BaseModel):
+    restaurant: dict[str, Any]
+    purchases_by_month: list[dict[str, Any]]
+    supplier_spend: list[dict[str, Any]]
+    price_variations: list[dict[str, Any]]
+    price_alerts: list[dict[str, Any]]
+    recipe_profitability: list[dict[str, Any]]
+    production_by_period: list[dict[str, Any]]
+    stock_consumption_by_period: list[dict[str, Any]]
+    team_time: dict[str, Any]
+    haccp: dict[str, Any]
+    invoices_by_supplier: list[dict[str, Any]]
+    generated_at: datetime
+
+
 class SubRecipeCreate(BaseModel):
     name: str
     category: str | None = None
