@@ -23,7 +23,7 @@ type HaccpTask = {
   corrective_action: string | null;
   notes: string | null;
   scheduled_for_date: string | null;
-  scheduled_service: "MIDI" | "SOIR" | null;
+  scheduled_service: "MATIN" | "MIDI" | "SOIR" | null;
   is_archived: boolean;
   validations: Array<{
     id: string;
@@ -275,7 +275,7 @@ export function HaccpClient() {
                       <p className="truncate text-sm font-medium">{task.title}</p>
                       <p className="truncate text-xs text-foreground/55">
                         {frequencyLabels[task.frequency]}
-                        {task.scheduled_service ? ` - service ${task.scheduled_service === "MIDI" ? "midi" : "soir"}` : ""}
+                        {task.scheduled_service ? ` - service ${serviceLabel(task.scheduled_service)}` : ""}
                       </p>
                     </div>
                   </button>
@@ -330,7 +330,7 @@ export function HaccpClient() {
                   <p className="text-sm font-medium">{task.title}</p>
                   <p className="text-xs text-foreground/55">
                     {task.scheduled_for_date ? new Date(task.scheduled_for_date).toLocaleDateString("fr-FR") : "Sans date"}
-                    {task.scheduled_service ? ` - ${task.scheduled_service === "MIDI" ? "midi" : "soir"}` : ""}
+                    {task.scheduled_service ? ` - ${serviceLabel(task.scheduled_service)}` : ""}
                   </p>
                 </div>
                 <span className="rounded-md bg-muted px-2 py-1 text-xs text-foreground/70">{statusLabels[task.display_status]}</span>
@@ -385,4 +385,10 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function StateLine({ text, loading = true }: { text: string; loading?: boolean }) {
   return <div className="flex items-center gap-3 px-4 py-4 text-sm text-foreground/55">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{text}</div>;
+}
+function serviceLabel(value: HaccpTask["scheduled_service"]) {
+  if (value === "MATIN") return "matin";
+  if (value === "MIDI") return "midi";
+  if (value === "SOIR") return "soir";
+  return "";
 }

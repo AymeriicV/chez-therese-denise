@@ -811,11 +811,11 @@ def _default_cleaning_catalog():
         {"title": "Lave-main", "frequency": "DAILY", "due_hour": 18, "service": None, "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
         {"title": "Plonge", "frequency": "DAILY", "due_hour": 18, "service": None, "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
         {"title": "Machine à plonge", "frequency": "DAILY", "due_hour": 18, "service": None, "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
-        {"title": "Friteuse", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MIDI", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Friteuse", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MATIN", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
         {"title": "Friteuse", "frequency": "AFTER_SERVICE", "due_hour": 23, "service": "SOIR", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
-        {"title": "Piano de cuisson", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MIDI", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Piano de cuisson", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MATIN", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
         {"title": "Piano de cuisson", "frequency": "AFTER_SERVICE", "due_hour": 23, "service": "SOIR", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
-        {"title": "Four", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MIDI", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
+        {"title": "Four", "frequency": "AFTER_SERVICE", "due_hour": 14, "service": "MATIN", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
         {"title": "Four", "frequency": "AFTER_SERVICE", "due_hour": 23, "service": "SOIR", "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]},
         {"title": "Hotte", "frequency": "WEEKLY", "due_hour": 18, "service": None, "days": ["SUN"]},
     ]
@@ -829,6 +829,18 @@ def _cleaning_occurrences_for_date(target_date: date, cleaning_rules: list[dict]
         if days and weekday_code not in days:
             continue
         if not days and rule["frequency"] == "WEEKLY" and weekday_code != "SUN":
+            continue
+        if rule["frequency"] == "AFTER_SERVICE" and not rule.get("service"):
+            for service, due_hour in (("MATIN", 14), ("SOIR", 23)):
+                occurrences.append(
+                    {
+                        "title": f"{rule['title']} - service {service.lower()}",
+                        "frequency": rule["frequency"],
+                        "template_key": f"cleaning:{rule['title']}:{service}",
+                        "scheduled_service": service,
+                        "due_at": datetime.combine(target_date, time(due_hour, 0), UTC),
+                    }
+                )
             continue
         due_at = datetime.combine(target_date, time(rule["due_hour"], 0), UTC)
         service_suffix = f" - service {rule['service'].lower()}" if rule["service"] else ""

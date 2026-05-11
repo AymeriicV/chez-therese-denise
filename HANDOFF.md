@@ -133,6 +133,12 @@ Ce compte est uniquement pour le developpement local. Ne jamais utiliser `admin`
 - HACCP: le champ `days` des taches de nettoyage dans les parametres est pris en compte pour les dates reelles.
 - HACCP: les tâches du jour sont réconciliées avec la configuration restaurant et les tâches obsoletes du jour sont archivees automatiquement.
 
+## Derniere correction
+
+- HACCP: les tâches `AFTER_SERVICE` sont maintenant libellées `Matin` et `Soir`.
+- HACCP: quand une règle `AFTER_SERVICE` n'a pas de service explicite, le backend génère une occurrence matin et une occurrence soir.
+- HACCP: l'UI `/haccp` affiche correctement ces deux services dans la liste et dans les détails.
+
 ## Prochaine reprise
 
 Continuer avec commandes fournisseurs, ou reprendre sous-recettes avancees, couts matieres, marges et allergenes consolides. Garder la meme regle: aucun bouton decoratif, mutations branchees API, erreurs visibles et state UI mis a jour depuis les reponses backend.

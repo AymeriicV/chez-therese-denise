@@ -514,3 +514,9 @@ Reprendre le bloc suivant avec sous-recettes, couts matieres, marges et allergen
 - Les tâches de nettoyage HACCP sont maintenant générees a partir de `settings.haccp.cleaning_tasks` au lieu d'un catalogue code en dur uniquement.
 - Les jours de recurrence du JSON `days` sont pris en compte par la génération quotidienne des contrôles.
 - Quand on ouvre `/haccp`, les tâches existantes du jour sont réconciliées avec la configuration restaurant et les tâches obsoletes du jour sont archivees automatiquement.
+
+## Etape 21 - Nettoyage apres service
+
+- Les controles `AFTER_SERVICE` sont maintenant labels `Matin` et `Soir` au lieu de `Midi` et `Soir`.
+- Le backend genere deux occurrences distinctes pour les tâches sans service explicite: une le matin, une le soir.
+- L'interface HACCP affiche maintenant correctement `matin` et `soir` pour les contrôles de nettoyage après service.
