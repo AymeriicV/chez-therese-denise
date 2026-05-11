@@ -1,5 +1,3 @@
-"use client";
-
 import { BarChart3 } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Topbar } from "@/components/shell/topbar";

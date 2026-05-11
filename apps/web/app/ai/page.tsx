@@ -1,5 +1,3 @@
-"use client";
-
 import { Sparkles } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Topbar } from "@/components/shell/topbar";

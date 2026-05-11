@@ -35,10 +35,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <div className="flex">
         <Sidebar />
-        <main className="min-w-0 flex-1 pb-20 lg:pb-0">{children}</main>
+        <main className="min-w-0 flex-1 overflow-x-hidden pb-20 lg:pb-0">{children}</main>
       </div>
     </div>
   );

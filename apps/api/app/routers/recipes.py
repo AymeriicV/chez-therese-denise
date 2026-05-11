@@ -62,8 +62,9 @@ async def upload_recipe_photo(
 ):
     recipe = await _get_recipe(recipe_id, ctx["restaurant_id"])
     photo = await _store_recipe_photo(file, ctx["restaurant_id"], recipe_id)
-    if recipe.photoPath:
-        old_path = Path(recipe.photoPath)
+    current_photo_path = _field(recipe, "photoPath", "photo_path")
+    if current_photo_path:
+        old_path = Path(current_photo_path)
         if old_path.exists() and old_path != photo["storage_path"]:
             old_path.unlink(missing_ok=True)
     updated = await db.recipe.update(
@@ -88,12 +89,15 @@ async def upload_recipe_photo(
 @router.get("/{recipe_id}/photo")
 async def get_recipe_photo(recipe_id: str, ctx=Depends(get_restaurant_context)):
     recipe = await _get_recipe(recipe_id, ctx["restaurant_id"])
-    if not recipe.photoPath:
+    photo_path = _field(recipe, "photoPath", "photo_path")
+    if not photo_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo introuvable")
-    path = Path(recipe.photoPath)
+    path = Path(photo_path)
     if not path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo introuvable")
-    return FileResponse(path, media_type=recipe.photoMimeType or "image/jpeg", filename=recipe.photoName or f"{recipe.name}.jpg")
+    photo_mime_type = _field(recipe, "photoMimeType", "photo_mime_type", default="image/jpeg")
+    photo_name = _field(recipe, "photoName", "photo_name", default=f"{recipe.name}.jpg")
+    return FileResponse(path, media_type=photo_mime_type or "image/jpeg", filename=photo_name)
 
 
 @router.get("/meta/allergens")
@@ -622,26 +626,39 @@ def _sub_recipe_include():
     return {"ingredients": {"include": {"inventoryItem": True}}}
 
 
+def _field(obj, *names, default=None):
+    for name in names:
+        if hasattr(obj, name):
+            value = getattr(obj, name)
+            if value is not None:
+                return value
+    return default
+
+
 def _serialize_recipe(recipe):
     ingredients = sorted(recipe.ingredients, key=lambda ingredient: (_ingredient_sort_order(ingredient), ingredient.createdAt))
     return {
         "id": recipe.id,
         "name": recipe.name,
         "category": recipe.category,
-        "portion_yield": recipe.portionYield,
-        "selling_price": recipe.sellingPrice,
-        "food_cost": recipe.foodCost,
-        "cost_per_portion": recipe.costPerPortion,
-        "recommended_price": recipe.costPerPortion / Decimal("0.28") if recipe.costPerPortion > 0 else Decimal("0"),
-        "margin_rate": recipe.marginRate,
+        "portion_yield": _field(recipe, "portionYield", "portion_yield", default=Decimal("1")),
+        "selling_price": _field(recipe, "sellingPrice", "selling_price", default=Decimal("0")),
+        "food_cost": _field(recipe, "foodCost", "food_cost", default=Decimal("0")),
+        "cost_per_portion": _field(recipe, "costPerPortion", "cost_per_portion", default=Decimal("0")),
+        "recommended_price": (
+            _field(recipe, "costPerPortion", "cost_per_portion", default=Decimal("0")) / Decimal("0.28")
+            if _field(recipe, "costPerPortion", "cost_per_portion", default=Decimal("0")) > 0
+            else Decimal("0")
+        ),
+        "margin_rate": _field(recipe, "marginRate", "margin_rate", default=Decimal("0")),
         "allergens": recipe.allergens,
         "instructions": recipe.instructions,
-        "photo_name": recipe.photoName,
-        "photo_mime_type": recipe.photoMimeType,
-        "photo_path": recipe.photoPath,
-        "photo_url": f"/api/v1/recipes/{recipe.id}/photo" if recipe.photoPath else None,
-        "is_active": recipe.isActive,
-        "updated_at": recipe.updatedAt,
+        "photo_name": _field(recipe, "photoName", "photo_name"),
+        "photo_mime_type": _field(recipe, "photoMimeType", "photo_mime_type"),
+        "photo_path": _field(recipe, "photoPath", "photo_path"),
+        "photo_url": f"/api/v1/recipes/{recipe.id}/photo" if _field(recipe, "photoPath", "photo_path") else None,
+        "is_active": _field(recipe, "isActive", "is_active", default=True),
+        "updated_at": _field(recipe, "updatedAt", "updated_at"),
         "ingredient_count": len(ingredients),
         "ingredients": [_serialize_recipe_ingredient(ingredient) for ingredient in ingredients],
     }
@@ -670,13 +687,13 @@ def _serialize_sub_recipe(sub_recipe):
         "id": sub_recipe.id,
         "name": sub_recipe.name,
         "category": sub_recipe.category,
-        "batch_unit": sub_recipe.batchUnit,
-        "batch_yield": sub_recipe.batchYield,
-        "cost": sub_recipe.cost,
-        "cost_per_unit": sub_recipe.costPerUnit,
+        "batch_unit": _field(sub_recipe, "batchUnit", "batch_unit"),
+        "batch_yield": _field(sub_recipe, "batchYield", "batch_yield"),
+        "cost": _field(sub_recipe, "cost", default=Decimal("0")),
+        "cost_per_unit": _field(sub_recipe, "costPerUnit", "cost_per_unit", default=Decimal("0")),
         "allergens": sub_recipe.allergens,
         "instructions": sub_recipe.instructions,
-        "is_active": sub_recipe.isActive,
+        "is_active": _field(sub_recipe, "isActive", "is_active", default=True),
         "ingredient_count": len(ingredients),
         "ingredients": [_serialize_sub_recipe_ingredient(ingredient) for ingredient in ingredients],
     }
